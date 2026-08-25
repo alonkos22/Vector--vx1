@@ -48,5 +48,5 @@ working, testable increment. See commit history for progress.
 - [x] Milestone 5 — Production queues
 - [x] Milestone 6 — Convergence (fusion) system
 - [x] Milestone 7 — Fog of war + basic AI opponent
-- [ ] Milestone 8 — Sun Proximity system + win/lose flow
+- [x] Milestone 8 — Sun Proximity system + win/lose flow
 - [ ] Milestone 9 — Extend to Pyroliths, Solari Archons, Frost-Forged
