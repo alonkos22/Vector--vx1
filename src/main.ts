@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { InputManager } from './game/InputManager';
 import { RTSCamera } from './game/RTSCamera';
-import { createPlaceholderGround } from './game/Terrain';
+import { BiomeTerrain } from './game/BiomeTerrain';
+import { CoreZone } from './game/CoreZone';
+import { BIOMES } from './config/biomes';
 
 const MAP_HALF_EXTENT = 100;
 
@@ -43,16 +45,11 @@ scene.add(sunB);
 const ambient = new THREE.AmbientLight(0x404550, 0.6);
 scene.add(ambient);
 
-scene.add(createPlaceholderGround(MAP_HALF_EXTENT));
+const terrain = new BiomeTerrain(BIOMES['cyber-nexus'], MAP_HALF_EXTENT);
+scene.add(terrain.group);
 
-// Core Zone placeholder marker at map center (full spec in Milestone 2).
-const coreMarker = new THREE.Mesh(
-  new THREE.OctahedronGeometry(3, 0),
-  new THREE.MeshStandardMaterial({ color: 0x66e0ff, emissive: 0x1560aa, emissiveIntensity: 0.8 }),
-);
-coreMarker.position.y = 3;
-coreMarker.castShadow = true;
-scene.add(coreMarker);
+const coreZone = new CoreZone();
+scene.add(coreZone.group);
 
 function onResize(): void {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -66,7 +63,8 @@ function animate(): void {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.1);
 
-  coreMarker.rotation.y += dt * 0.4;
+  terrain.update(dt);
+  coreZone.update(dt);
 
   rtsCamera.update(dt, input, window.innerWidth, window.innerHeight);
   renderer.render(scene, rtsCamera.camera);
