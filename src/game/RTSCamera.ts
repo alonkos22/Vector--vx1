@@ -53,6 +53,11 @@ export class RTSCamera {
   private shakeDuration = 0;
   private shakeIntensity = 0;
 
+  /** Current zoom distance, exposed read-only so the minimap can size its viewport indicator box. */
+  get viewDistance(): number {
+    return this.distance;
+  }
+
   constructor(aspect: number, opts: Partial<RTSCameraOptions> = {}) {
     this.opts = { ...DEFAULT_OPTIONS, ...opts };
     this.distance = this.opts.startDistance;

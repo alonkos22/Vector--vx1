@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { PlayerBase } from '../PlayerBase';
+import type { Targetable } from '../Targetable';
 
 type ArmyState = 'massing' | 'attacking' | 'retreating';
 
@@ -26,6 +27,7 @@ export class AIController {
   private decisionTimer = 0;
   private armyState: ArmyState = 'massing';
   private attackStartMaxHp = 0;
+  private readonly lastHpByEntity = new Map<Targetable, number>();
 
   constructor(base: PlayerBase, enemyBasePosition: THREE.Vector3) {
     this.base = base;
@@ -33,6 +35,9 @@ export class AIController {
   }
 
   update(dt: number): void {
+    // Checked every frame (not gated by the slow decision tick) so a rush on an idle/massing army gets punished immediately.
+    this.checkForThreats();
+
     this.decisionTimer -= dt;
     if (this.decisionTimer > 0) return;
     this.decisionTimer = DECISION_INTERVAL_SEC;
@@ -40,6 +45,27 @@ export class AIController {
     this.manageEconomy();
     this.manageProduction();
     this.manageArmy();
+  }
+
+  /**
+   * Compares each own building/harvester/combat-unit's hp against last frame's;
+   * any drop means something is under attack right now, so pull every unit
+   * without an active target there to fight back — without this, an army
+   * that's "massing" a few units away from the actual harass point would
+   * otherwise never notice and let the raid go entirely unpunished.
+   */
+  private checkForThreats(): void {
+    const entities: Targetable[] = [...this.base.allBuildings(), ...this.base.harvesters, ...this.base.combatUnits];
+    let threatPosition: THREE.Vector3 | null = null;
+    for (const entity of entities) {
+      const previousHp = this.lastHpByEntity.get(entity);
+      if (previousHp !== undefined && entity.hp < previousHp) threatPosition = entity.position.clone();
+      this.lastHpByEntity.set(entity, entity.hp);
+    }
+    if (!threatPosition) return;
+    for (const unit of this.base.combatUnits) {
+      if (!unit.target) unit.moveTo(threatPosition);
+    }
   }
 
   private manageEconomy(): void {

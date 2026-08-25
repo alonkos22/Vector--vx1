@@ -16,6 +16,9 @@ export interface HUDPanelDef {
 export interface HUDCallbacks {
   onBeginPlaceBuilding: (buildingId: string) => void;
   onQueueUnit: (buildingId: string, unitId: string) => void;
+  /** Arms rally-point placement for this building; the next ground click sets it. */
+  onSetRallyPoint: (buildingId: string) => void;
+  onClearRallyPoint: (buildingId: string) => void;
 }
 
 export interface HUDPanelState {
@@ -30,6 +33,10 @@ export interface HUDPanelState {
   queueProgress: number | null;
   queueFull: boolean;
   unitAffordability: Record<string, boolean>;
+  /** Whether this building currently has a rally point set. */
+  hasRallyPoint: boolean;
+  /** Whether this panel is the one currently arming rally-point placement (waiting for a ground click). */
+  rallyArmed: boolean;
 }
 
 export interface HUDState {
@@ -61,6 +68,7 @@ interface PanelElements {
   buildButton: HTMLButtonElement | null;
   queueLabel: HTMLDivElement;
   unitButtons: Map<string, HTMLButtonElement>;
+  rallyButton: HTMLButtonElement | null;
 }
 
 /** DOM-based HUD: resource counters + one panel per production building, built once and updated per-frame. */
@@ -132,7 +140,7 @@ export class HUD {
 
     const hintEl = document.createElement('div');
     hintEl.style.cssText = `
-      position: absolute; bottom: 12px; right: 12px;
+      position: absolute; bottom: 190px; right: 12px;
       background: rgba(10,16,24,0.6); border: 1px solid #2ea3ff33;
       border-radius: 6px; padding: 6px 12px; font-size: 11px; color: #9fd8ffcc;
       font-family: 'Segoe UI', Roboto, sans-serif; pointer-events: none; user-select: none;
@@ -178,7 +186,22 @@ export class HUD {
     queueLabel.style.cssText = 'font-size: 11px; color: #9fd8ffcc;';
     panel.appendChild(queueLabel);
 
-    this.panels.set(def.buildingId, { container: panel, buildButton, queueLabel, unitButtons });
+    let rallyButton: HTMLButtonElement | null = null;
+    if (def.units.length > 0) {
+      rallyButton = document.createElement('button');
+      styleButton(rallyButton);
+      rallyButton.style.display = 'none';
+      rallyButton.textContent = '🚩 Set Rally Point';
+      rallyButton.title = 'Click to place, right-click to clear';
+      rallyButton.addEventListener('click', () => callbacks.onSetRallyPoint(def.buildingId));
+      rallyButton.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        callbacks.onClearRallyPoint(def.buildingId);
+      });
+      panel.appendChild(rallyButton);
+    }
+
+    this.panels.set(def.buildingId, { container: panel, buildButton, queueLabel, unitButtons, rallyButton });
     return panel;
   }
 
@@ -219,7 +242,16 @@ export class HUD {
           ? `Queue: ${panelState.queueLength}${panelState.queueFull ? ' (full)' : ''} — building ${Math.floor((panelState.queueProgress ?? 0) * 100)}%`
           : '';
 
-      for (const btn of [...(els.buildButton ? [els.buildButton] : []), ...els.unitButtons.values()]) {
+      if (els.rallyButton) {
+        els.rallyButton.style.display = panelState.built ? 'block' : 'none';
+        if (panelState.rallyArmed) {
+          els.rallyButton.textContent = 'Click the ground to set rally (Esc to cancel)';
+        } else {
+          els.rallyButton.textContent = panelState.hasRallyPoint ? '🚩 Rally Set (right-click to clear)' : '🚩 Set Rally Point';
+        }
+      }
+
+      for (const btn of [...(els.buildButton ? [els.buildButton] : []), ...els.unitButtons.values(), ...(els.rallyButton ? [els.rallyButton] : [])]) {
         btn.style.opacity = btn.disabled ? '0.5' : '1';
         btn.style.cursor = btn.disabled ? 'default' : 'pointer';
       }

@@ -21,7 +21,9 @@ import { FogOfWar } from './game/FogOfWar';
 import { AIController } from './game/ai/AIController';
 import { SunProximity, type SunProximityStage } from './game/SunProximity';
 import { CoreEnergyWave } from './game/hazards/CoreEnergyWave';
+import { buildRallyFlag } from './game/RallyFlag';
 import { HUD, type HUDPanelDef, type HUDPanelState } from './ui/HUD';
+import { Minimap } from './ui/Minimap';
 
 function formatCost(costCoreEnergy: number, costFactionResource: number, buildTimeSec: number): string {
   const parts: string[] = [];
@@ -241,23 +243,64 @@ function confirmPlacement(point: THREE.Vector3): void {
   cancelPlacement();
 }
 
+let rallyTarget: string | null = null;
+let rallyGhost: THREE.Group | null = null;
+
+function beginRallySet(buildingId: string): void {
+  if (placementTarget || rallyTarget === buildingId) return;
+  cancelRally();
+  rallyTarget = buildingId;
+  rallyGhost = buildRallyFlag();
+  scene.add(rallyGhost);
+  hud.setStatus('Click the ground to set the rally point (Esc to cancel)');
+}
+
+function cancelRally(): void {
+  rallyTarget = null;
+  if (rallyGhost) {
+    scene.remove(rallyGhost);
+    rallyGhost = null;
+  }
+  hud.setStatus('');
+}
+
+function confirmRally(point: THREE.Vector3): void {
+  if (!rallyTarget) return;
+  playerBase.setRallyPoint(rallyTarget, point);
+  cancelRally();
+}
+
+function clearRallyPoint(buildingId: string): void {
+  playerBase.setRallyPoint(buildingId, null);
+}
+
 renderer.domElement.addEventListener('mousemove', (e) => {
-  if (!placementTarget || !ghostMesh) return;
-  const point = screenToGround(e.clientX, e.clientY);
-  if (point) {
-    ghostMesh.position.x = point.x;
-    ghostMesh.position.z = point.z;
+  if (placementTarget && ghostMesh) {
+    const point = screenToGround(e.clientX, e.clientY);
+    if (point) {
+      ghostMesh.position.x = point.x;
+      ghostMesh.position.z = point.z;
+    }
+  } else if (rallyTarget && rallyGhost) {
+    const point = screenToGround(e.clientX, e.clientY);
+    if (point) rallyGhost.position.copy(point);
   }
 });
 
 renderer.domElement.addEventListener('click', (e) => {
-  if (!placementTarget) return;
-  const point = screenToGround(e.clientX, e.clientY);
-  if (point) confirmPlacement(point);
+  if (placementTarget) {
+    const point = screenToGround(e.clientX, e.clientY);
+    if (point) confirmPlacement(point);
+  } else if (rallyTarget) {
+    const point = screenToGround(e.clientX, e.clientY);
+    if (point) confirmRally(point);
+  }
 });
 
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Escape' && placementTarget) cancelPlacement();
+  if (e.code !== 'Escape') return;
+  if (placementTarget) cancelPlacement();
+  if (rallyTarget) cancelRally();
 });
 
 // ---------------------------------------------------------------------------
@@ -426,6 +469,12 @@ const panelDefs: HUDPanelDef[] = PRODUCER_BUILDING_IDS.map((buildingId) => {
 const hud = new HUD(app, panelDefs, {
   onBeginPlaceBuilding: beginPlacement,
   onQueueUnit: tryQueueUnit,
+  onSetRallyPoint: beginRallySet,
+  onClearRallyPoint: clearRallyPoint,
+});
+
+const minimap = new Minimap(app, (worldX, worldZ) => {
+  rtsCamera.target.set(worldX, 0, worldZ);
 });
 
 function buildPanelState(buildingId: string): HUDPanelState {
@@ -449,6 +498,8 @@ function buildPanelState(buildingId: string): HUDPanelState {
     queueProgress: building?.productionProgress() ?? null,
     queueFull: building ? !building.canEnqueue() : false,
     unitAffordability,
+    hasRallyPoint: building?.rallyPoint !== null && building?.rallyPoint !== undefined,
+    rallyArmed: rallyTarget === buildingId,
   };
 }
 
@@ -546,6 +597,21 @@ function animate(): void {
     for (const unit of aiBase.combatUnits) unit.mesh.visible = fogOfWar.isVisible(unit.position);
     for (const building of aiBase.allBuildings()) building.mesh.visible = fogOfWar.isVisible(building.position);
     for (const dummy of dummies) dummy.mesh.visible = fogOfWar.isVisible(dummy.position);
+
+    minimap.update({
+      mapHalfExtent: MAP_HALF_EXTENT,
+      playerBuildings: playerBase.allBuildings().map((b) => ({ x: b.position.x, z: b.position.z })),
+      playerUnits: [...playerBase.harvesters, ...playerBase.combatUnits].map((u) => ({ x: u.position.x, z: u.position.z })),
+      visibleEnemyBuildings: aiBase
+        .allBuildings()
+        .filter((b) => fogOfWar.isVisible(b.position))
+        .map((b) => ({ x: b.position.x, z: b.position.z })),
+      visibleEnemyUnits: [...aiBase.harvesters, ...aiBase.combatUnits]
+        .filter((u) => fogOfWar.isVisible(u.position))
+        .map((u) => ({ x: u.position.x, z: u.position.z })),
+      cameraTarget: { x: rtsCamera.target.x, z: rtsCamera.target.z },
+      cameraDistance: rtsCamera.viewDistance,
+    });
 
     selection.prune();
     updateSelectionHUD();

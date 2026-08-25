@@ -11,6 +11,7 @@ import type { EffectManager } from './CombatVFX';
 import type { Targetable } from './Targetable';
 import type { VisionSource } from './FogOfWar';
 import { pathGrid } from './Pathfinding';
+import { buildRallyFlag } from './RallyFlag';
 
 /**
  * One faction base's full economy/production/army: everything the human
@@ -42,6 +43,7 @@ export class PlayerBase {
   private readonly buildingsConfig: Record<BuildingRole, BuildingConfig>;
   private readonly unitsConfig: Record<string, UnitConfig>;
   private readonly buildingsByRole: Partial<Record<BuildingRole, Building>> = {};
+  private readonly rallyMarkers: Partial<Record<BuildingRole, THREE.Group>> = {};
   private assignedToEnergy = 0;
   private assignedToFlux = 0;
 
@@ -172,6 +174,32 @@ export class PlayerBase {
     return building;
   }
 
+  /** Sets (or, with a null point, clears) the ground point newly trained combat units from this building auto-move to. */
+  setRallyPoint(buildingIdOrRole: string, point: THREE.Vector3 | null): boolean {
+    const role = this.resolveRole(buildingIdOrRole);
+    const building = role ? this.getBuildingByRole(role) : null;
+    if (!role || !building) return false;
+    building.rallyPoint = point ? point.clone() : null;
+
+    const existingMarker = this.rallyMarkers[role];
+    if (!point) {
+      if (existingMarker) {
+        this.scene.remove(existingMarker);
+        delete this.rallyMarkers[role];
+      }
+      return true;
+    }
+    if (existingMarker) {
+      existingMarker.position.copy(point);
+    } else {
+      const marker = buildRallyFlag(this.factionConfig.colorSecondary);
+      marker.position.copy(point);
+      this.scene.add(marker);
+      this.rallyMarkers[role] = marker;
+    }
+    return true;
+  }
+
   tryQueueUnit(buildingIdOrRole: string, unitTypeId: string): boolean {
     const building = this.getPlacedBuilding(buildingIdOrRole);
     if (!building || !building.isComplete || !building.canEnqueue()) return false;
@@ -182,12 +210,16 @@ export class PlayerBase {
     return true;
   }
 
-  private onProductionFinished(buildingPosition: THREE.Vector3, unitTypeId: string): void {
+  private onProductionFinished(building: Building, unitTypeId: string): void {
     const jitter = new THREE.Vector3((Math.random() - 0.5) * 6, 0, (Math.random() - 0.5) * 6);
-    const spawnPos = buildingPosition.clone().add(jitter);
+    const spawnPos = building.position.clone().add(jitter);
     const config = this.unitsConfig[unitTypeId];
-    if (config?.combat) this.spawnCombatUnit(unitTypeId, spawnPos);
-    else this.spawnHarvester(spawnPos);
+    if (config?.combat) {
+      const unit = this.spawnCombatUnit(unitTypeId, spawnPos);
+      if (building.rallyPoint) unit.moveTo(building.rallyPoint);
+    } else {
+      this.spawnHarvester(spawnPos);
+    }
   }
 
   allBuildings(): Building[] {
@@ -225,13 +257,20 @@ export class PlayerBase {
 
     for (const building of this.allBuildings()) {
       const finishedUnitId = building.collectFinishedProduction();
-      if (finishedUnitId) this.onProductionFinished(building.position, finishedUnitId);
+      if (finishedUnitId) this.onProductionFinished(building, finishedUnitId);
     }
 
     for (const role of BUILDING_ROLES) {
       if (role === 'main') continue;
       const building = this.buildingsByRole[role];
-      this.cleanUpDestroyedBuilding(building ?? null, () => delete this.buildingsByRole[role]);
+      this.cleanUpDestroyedBuilding(building ?? null, () => {
+        delete this.buildingsByRole[role];
+        const marker = this.rallyMarkers[role];
+        if (marker) {
+          this.scene.remove(marker);
+          delete this.rallyMarkers[role];
+        }
+      });
     }
 
     if (this.factionConfig.economyMode === 'passive') {

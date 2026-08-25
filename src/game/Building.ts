@@ -21,6 +21,8 @@ export class Building implements Targetable {
   isComplete: boolean;
   maxHp: number;
   hp: number;
+  /** Ground point newly produced combat units auto-move to, or null to spawn in place. Player-set only; the AI doesn't use rally points. */
+  rallyPoint: THREE.Vector3 | null = null;
 
   private readonly material: THREE.MeshStandardMaterial;
   private readonly healthBar: HealthBar;
