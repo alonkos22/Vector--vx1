@@ -18,7 +18,7 @@ export class FluxHarvester extends Unit {
   private node: ResourceNode | null = null;
   private dropoff: Building | null = null;
 
-  constructor(position: THREE.Vector3, moveSpeed: number) {
+  constructor(position: THREE.Vector3, moveSpeed: number, selectionRadius: number) {
     const geometry = new THREE.CapsuleGeometry(0.5, 0.8, 4, 8);
     const material = new THREE.MeshStandardMaterial({
       color: 0x4fc3ff,
@@ -30,7 +30,7 @@ export class FluxHarvester extends Unit {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
     mesh.position.y = 0.9;
-    super(mesh, position, moveSpeed);
+    super('flux-harvester', 'player', mesh, position, moveSpeed, selectionRadius);
   }
 
   /** (Re)assigns this harvester to a node/dropoff pair and starts the gather loop. */

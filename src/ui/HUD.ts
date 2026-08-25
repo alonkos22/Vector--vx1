@@ -40,6 +40,7 @@ export class HUD {
   private readonly trainButton: HTMLButtonElement;
   private readonly siphonButton: HTMLButtonElement;
   private readonly statusEl: HTMLDivElement;
+  private readonly selectionEl: HTMLDivElement;
 
   constructor(container: HTMLElement, callbacks: HUDCallbacks) {
     const root = document.createElement('div');
@@ -86,6 +87,26 @@ export class HUD {
 
     root.appendChild(actionBar);
     container.appendChild(root);
+
+    this.selectionEl = document.createElement('div');
+    this.selectionEl.style.cssText = `
+      position: absolute; bottom: 12px; left: 12px;
+      background: rgba(10,16,24,0.75); border: 1px solid #2ea3ff55;
+      border-radius: 6px; padding: 8px 14px; font-size: 13px; color: #dff3ff;
+      font-family: 'Segoe UI', Roboto, sans-serif; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      pointer-events: none; display: none; user-select: none;
+    `;
+    container.appendChild(this.selectionEl);
+
+    const hintEl = document.createElement('div');
+    hintEl.style.cssText = `
+      position: absolute; bottom: 12px; right: 12px;
+      background: rgba(10,16,24,0.6); border: 1px solid #2ea3ff33;
+      border-radius: 6px; padding: 6px 12px; font-size: 11px; color: #9fd8ffcc;
+      font-family: 'Segoe UI', Roboto, sans-serif; pointer-events: none; user-select: none;
+    `;
+    hintEl.textContent = 'Drag: select · Right-click: move/attack · Dbl-click: select type · Ctrl+1-9: set group · 1-9: recall group';
+    container.appendChild(hintEl);
   }
 
   update(state: HUDState): void {
@@ -123,5 +144,10 @@ export class HUD {
 
   setStatus(text: string): void {
     this.statusEl.textContent = text;
+  }
+
+  setSelectionInfo(text: string): void {
+    this.selectionEl.style.display = text ? 'block' : 'none';
+    this.selectionEl.textContent = text;
   }
 }

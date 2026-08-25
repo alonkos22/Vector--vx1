@@ -11,6 +11,12 @@ import { PlayerEconomy } from './game/Economy';
 import { ResourceNode, type ResourceType } from './game/ResourceNode';
 import { Building } from './game/Building';
 import { FluxHarvester } from './game/units/FluxHarvester';
+import { CombatUnit } from './game/units/CombatUnit';
+import { TrainingDummy } from './game/units/TrainingDummy';
+import { Unit } from './game/units/Unit';
+import { pathGrid } from './game/Pathfinding';
+import { EffectManager } from './game/CombatVFX';
+import { SelectionManager } from './game/Selection';
 import { HUD } from './ui/HUD';
 
 const MAP_HALF_EXTENT = 100;
@@ -64,6 +70,15 @@ scene.add(terrain.group);
 const coreZone = new CoreZone();
 scene.add(coreZone.group);
 
+const effects = new EffectManager(scene);
+
+// ---------------------------------------------------------------------------
+// Pathfinding grid: init before anything moves, then register static obstacles.
+// ---------------------------------------------------------------------------
+
+pathGrid.init(MAP_HALF_EXTENT, 2);
+pathGrid.markCircleBlocked(new THREE.Vector3(0, 0, 0), 9);
+
 // ---------------------------------------------------------------------------
 // Economy loop
 // ---------------------------------------------------------------------------
@@ -72,6 +87,7 @@ const economy = new PlayerEconomy(STARTING_CORE_ENERGY, 0);
 
 const coreSpire = new Building(CYBER_NEXUS_BUILDINGS['core-spire'], BASE_POSITION, true);
 scene.add(coreSpire.mesh);
+pathGrid.markCircleBlocked(coreSpire.position, CYBER_NEXUS_BUILDINGS['core-spire'].footprint + 1);
 
 let fluxSiphon: Building | null = null;
 
@@ -121,7 +137,7 @@ function chooseResourceType(): ResourceType {
 
 function spawnHarvester(position: THREE.Vector3): void {
   const config = CYBER_NEXUS_UNITS['flux-harvester'];
-  const harvester = new FluxHarvester(position, config.moveSpeed);
+  const harvester = new FluxHarvester(position, config.moveSpeed, config.selectionRadius);
   scene.add(harvester.mesh);
   harvesters.push(harvester);
 
@@ -190,6 +206,7 @@ function confirmPlacement(point: THREE.Vector3): void {
   economy.spend(config.costCoreEnergy, config.costFactionResource);
   fluxSiphon = new Building(config, point, false);
   scene.add(fluxSiphon.mesh);
+  pathGrid.markCircleBlocked(fluxSiphon.position, config.footprint + 1);
   cancelPlacement();
 }
 
@@ -210,6 +227,101 @@ renderer.domElement.addEventListener('click', (e) => {
 
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && placementActive) cancelPlacement();
+});
+
+// ---------------------------------------------------------------------------
+// Combat units + placeholder training dummies (Milestone 4)
+// ---------------------------------------------------------------------------
+
+const combatUnits: CombatUnit[] = [];
+
+function spawnCombatUnit(unitTypeId: string, position: THREE.Vector3): void {
+  const config = CYBER_NEXUS_UNITS[unitTypeId];
+  const unit = new CombatUnit(config, 'player', position, effects);
+  scene.add(unit.mesh);
+  combatUnits.push(unit);
+}
+
+spawnCombatUnit('sentinel-drone', BASE_POSITION.clone().add(new THREE.Vector3(8, 0, 4)));
+spawnCombatUnit('sentinel-drone', BASE_POSITION.clone().add(new THREE.Vector3(8, 0, 7)));
+spawnCombatUnit('phase-trooper', BASE_POSITION.clone().add(new THREE.Vector3(11, 0, 2)));
+spawnCombatUnit('arc-walker', BASE_POSITION.clone().add(new THREE.Vector3(11, 0, 9)));
+
+const dummies: TrainingDummy[] = [];
+function spawnDummy(position: THREE.Vector3): void {
+  const dummy = new TrainingDummy(position);
+  scene.add(dummy.mesh);
+  dummies.push(dummy);
+}
+spawnDummy(BASE_POSITION.clone().add(new THREE.Vector3(28, 0, 6)));
+spawnDummy(BASE_POSITION.clone().add(new THREE.Vector3(30, 0, -4)));
+
+// ---------------------------------------------------------------------------
+// Selection + orders
+// ---------------------------------------------------------------------------
+
+function updateSelectionHUD(): void {
+  if (selection.selected.size === 0) {
+    hud.setSelectionInfo('');
+    return;
+  }
+  const byType = new Map<string, number>();
+  for (const unit of selection.selected) {
+    byType.set(unit.unitTypeId, (byType.get(unit.unitTypeId) ?? 0) + 1);
+  }
+  const parts = [...byType.entries()].map(([id, n]) => `${n}× ${CYBER_NEXUS_UNITS[id]?.name ?? id}`);
+  hud.setSelectionInfo(`Selected: ${parts.join(', ')}`);
+}
+
+const selection = new SelectionManager(
+  renderer,
+  rtsCamera.camera,
+  () => [...harvesters, ...combatUnits] as Unit[],
+  updateSelectionHUD,
+);
+
+function pickDummyAt(clientX: number, clientY: number): TrainingDummy | null {
+  const ndc = new THREE.Vector2((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, rtsCamera.camera);
+  const meshes = dummies.filter((d) => d.isAlive()).map((d) => d.mesh);
+  const hits = raycaster.intersectObjects(meshes, true);
+  for (const hit of hits) {
+    let obj: THREE.Object3D | null = hit.object;
+    while (obj) {
+      const ref = obj.userData.dummyRef as TrainingDummy | undefined;
+      if (ref) return ref;
+      obj = obj.parent;
+    }
+  }
+  return null;
+}
+
+function issueOrderAt(clientX: number, clientY: number): void {
+  const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
+  if (selectedCombat.length === 0 || placementActive) return;
+
+  const dummy = pickDummyAt(clientX, clientY);
+  if (dummy) {
+    for (const unit of selectedCombat) unit.setTarget(dummy);
+    return;
+  }
+
+  const point = screenToGround(clientX, clientY);
+  if (!point) return;
+  const spread = Math.min(1.2 * selectedCombat.length, 4);
+  selectedCombat.forEach((unit, i) => {
+    unit.setTarget(null);
+    const angle = (i / selectedCombat.length) * Math.PI * 2;
+    const offset =
+      selectedCombat.length > 1
+        ? new THREE.Vector3(Math.cos(angle) * spread, 0, Math.sin(angle) * spread)
+        : new THREE.Vector3();
+    unit.moveTo(point.clone().add(offset));
+  });
+}
+
+renderer.domElement.addEventListener('mouseup', (e) => {
+  if (e.button === 2) issueOrderAt(e.clientX, e.clientY);
 });
 
 // ---------------------------------------------------------------------------
@@ -254,6 +366,19 @@ function animate(): void {
   }
 
   for (const harvester of harvesters) harvester.update(dt, economy);
+
+  for (const combatUnit of combatUnits) combatUnit.update(dt, rtsCamera.camera, dummies);
+  for (let i = combatUnits.length - 1; i >= 0; i--) {
+    if (!combatUnits[i].isAlive()) {
+      scene.remove(combatUnits[i].mesh);
+      combatUnits.splice(i, 1);
+    }
+  }
+  for (const dummy of dummies) dummy.update(dt, rtsCamera.camera);
+  effects.update(dt);
+
+  selection.prune();
+  updateSelectionHUD();
 
   const trainCfg = CYBER_NEXUS_UNITS['flux-harvester'];
   const siphonCfg = CYBER_NEXUS_BUILDINGS['flux-siphon'];
