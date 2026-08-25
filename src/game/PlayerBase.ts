@@ -41,9 +41,14 @@ export class PlayerBase {
     this.basePosition = basePosition.clone();
     this.economy = new PlayerEconomy(startingCoreEnergy, 0);
 
-    this.coreSpire = new Building(CYBER_NEXUS_BUILDINGS['core-spire'], this.basePosition, true);
+    this.coreSpire = new Building(CYBER_NEXUS_BUILDINGS['core-spire'], ownerId, this.basePosition, true);
     scene.add(this.coreSpire.mesh);
     pathGrid.markCircleBlocked(this.coreSpire.position, CYBER_NEXUS_BUILDINGS['core-spire'].footprint + 1);
+  }
+
+  /** The prototype's win/lose condition per the build notes: losing the main structure. */
+  isDefeated(): boolean {
+    return !this.coreSpire.isAlive();
   }
 
   addResourceNode(type: ResourceType, offsetX: number, offsetZ: number): void {
@@ -122,7 +127,7 @@ export class PlayerBase {
     if (!this.canAffordBuilding(buildingId)) return null;
     const config = CYBER_NEXUS_BUILDINGS[buildingId];
     this.economy.spend(config.costCoreEnergy, config.costFactionResource);
-    const building = new Building(config, point, false);
+    const building = new Building(config, this.ownerId, point, false);
     this.scene.add(building.mesh);
     pathGrid.markCircleBlocked(building.position, config.footprint + 1);
     this.setPlacedBuilding(buildingId, building);
@@ -172,16 +177,28 @@ export class PlayerBase {
     return sources;
   }
 
-  updateEconomy(dt: number): void {
-    this.coreSpire.update(dt);
-    this.fluxSiphon?.update(dt);
-    this.fabricationNode?.update(dt);
-    this.droneFoundry?.update(dt);
+  updateEconomy(dt: number, camera: THREE.Camera): void {
+    this.coreSpire.update(dt, camera);
+    this.fluxSiphon?.update(dt, camera);
+    this.fabricationNode?.update(dt, camera);
+    this.droneFoundry?.update(dt, camera);
 
     for (const building of this.allBuildings()) {
       const finishedUnitId = building.collectFinishedProduction();
       if (finishedUnitId) this.onProductionFinished(building.position, finishedUnitId);
     }
+
+    this.cleanUpDestroyedBuilding(this.fluxSiphon, () => (this.fluxSiphon = null));
+    this.cleanUpDestroyedBuilding(this.fabricationNode, () => (this.fabricationNode = null));
+    this.cleanUpDestroyedBuilding(this.droneFoundry, () => (this.droneFoundry = null));
+  }
+
+  /** Non-Core-Spire buildings are removed on death (with a destruction VFX); Core Spire death is the loss condition, left in place for the match-end screen. */
+  private cleanUpDestroyedBuilding(building: Building | null, clear: () => void): void {
+    if (!building || building.isAlive()) return;
+    this.scene.remove(building.mesh);
+    this.effects.spawnBuildingDestroyed(building.position, building.config.footprint);
+    clear();
   }
 
   updateHarvesters(dt: number, camera: THREE.Camera): void {

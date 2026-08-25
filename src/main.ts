@@ -19,6 +19,8 @@ import { SelectionManager } from './game/Selection';
 import { ConvergenceManager } from './game/Convergence';
 import { FogOfWar } from './game/FogOfWar';
 import { AIController } from './game/ai/AIController';
+import { SunProximity, type SunProximityStage } from './game/SunProximity';
+import { CoreEnergyWave } from './game/hazards/CoreEnergyWave';
 import { HUD, type HUDPanelDef, type HUDPanelState } from './ui/HUD';
 
 function formatCost(costCoreEnergy: number, costFactionResource: number, buildTimeSec: number): string {
@@ -34,6 +36,8 @@ const PLAYER_BASE_POSITION = new THREE.Vector3(-55, 0, -55);
 const AI_BASE_POSITION = new THREE.Vector3(55, 0, 55);
 const STARTING_HARVESTERS = 2;
 const STARTING_CORE_ENERGY = 150;
+/** Not specified in the design doc — a tunable homebrew match length. */
+const MATCH_DURATION_SEC = 900;
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = '';
@@ -81,6 +85,53 @@ const coreZone = new CoreZone();
 scene.add(coreZone.group);
 
 const effects = new EffectManager(scene);
+
+// ---------------------------------------------------------------------------
+// Sun Proximity (§5): match-time progress through Stable/Converging/Critical,
+// driving real lighting (warmer, higher/shorter-shadow sun) and the Core
+// Zone's pulse (already wired to accept a stage since Milestone 2). Also
+// drives the Core Energy Wave hazard's intensity.
+// ---------------------------------------------------------------------------
+
+const sunProximity = new SunProximity(MATCH_DURATION_SEC);
+const coreEnergyWave = new CoreEnergyWave();
+
+const SUN_NEUTRAL_COLOR = new THREE.Color(0xfff2e0);
+const SUN_INTENSE_COLOR = new THREE.Color(0xffa04d);
+const SUN_BASE_HORIZONTAL = new THREE.Vector2(60, 40);
+const SUN_BASE_HEIGHT = 90;
+
+let previousStage: SunProximityStage = 'stable';
+
+function applySunProximity(progress: number, stage: SunProximityStage): void {
+  sunA.color.copy(SUN_NEUTRAL_COLOR).lerp(SUN_INTENSE_COLOR, progress);
+  sunA.intensity = 1.6 + progress * 1.3;
+
+  // Shadows shorten as the sun rises higher overhead (§4 lighting notes).
+  const heightBoost = progress * 45;
+  const horizScale = 1 - progress * 0.4;
+  sunA.position.set(SUN_BASE_HORIZONTAL.x * horizScale, SUN_BASE_HEIGHT + heightBoost, SUN_BASE_HORIZONTAL.y * horizScale);
+
+  coreZone.setStage(stage);
+
+  if (stage !== previousStage) {
+    // Let the stage change be felt, not just tracked.
+    rtsCamera.triggerShake(stage === 'critical' ? 1.1 : 0.5, stage === 'critical' ? 0.5 : 0.3);
+    triggerHitStop(0.05);
+    matchStatusEl.textContent = `Sun Proximity: ${stage[0].toUpperCase()}${stage.slice(1)}`;
+    previousStage = stage;
+  }
+}
+
+const matchStatusEl = document.createElement('div');
+matchStatusEl.style.cssText = `
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  background: rgba(10,16,24,0.75); border: 1px solid #2ea3ff55; border-radius: 6px;
+  padding: 6px 16px; font-family: 'Segoe UI', Roboto, sans-serif; font-size: 13px;
+  color: #dff3ff; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none; user-select: none;
+`;
+matchStatusEl.textContent = 'Sun Proximity: Stable';
+app.appendChild(matchStatusEl);
 
 // ---------------------------------------------------------------------------
 // Pathfinding grid: init before anything moves, then register static obstacles.
@@ -281,12 +332,13 @@ function pickTargetAt(clientX: number, clientY: number): Targetable | null {
     ...dummies.filter((d) => d.isAlive()).map((d) => d.mesh),
     ...aiBase.harvesters.map((h) => h.mesh),
     ...aiBase.combatUnits.map((u) => u.mesh),
+    ...aiBase.allBuildings().map((b) => b.mesh),
   ];
   const hits = raycaster.intersectObjects(meshes, true);
   for (const hit of hits) {
     let obj: THREE.Object3D | null = hit.object;
     while (obj) {
-      const ref = (obj.userData.dummyRef ?? obj.userData.unitRef) as Targetable | undefined;
+      const ref = (obj.userData.dummyRef ?? obj.userData.unitRef ?? obj.userData.buildingRef) as Targetable | undefined;
       if (ref) return ref;
       obj = obj.parent;
     }
@@ -385,6 +437,44 @@ function onResize(): void {
 }
 window.addEventListener('resize', onResize);
 
+// ---------------------------------------------------------------------------
+// Win/lose flow: destroying the enemy's main structure (Core Spire) is
+// enough for the prototype. Freezes all gameplay updates once decided.
+// ---------------------------------------------------------------------------
+
+let matchOver = false;
+
+function showMatchEndScreen(won: boolean): void {
+  matchOver = true;
+  hud.setStatus('');
+  cancelPlacement();
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px;
+    background: radial-gradient(ellipse at center, rgba(10,16,24,0.55) 0%, rgba(5,7,10,0.85) 100%);
+    font-family: 'Segoe UI', Roboto, sans-serif; pointer-events: none; z-index: 100;
+  `;
+
+  const title = document.createElement('div');
+  title.textContent = won ? 'VICTORY' : 'DEFEAT';
+  title.style.cssText = `
+    font-size: 64px; font-weight: 800; letter-spacing: 6px;
+    color: ${won ? '#7fffb0' : '#ff6f6f'};
+    text-shadow: 0 0 24px ${won ? '#4fe38caa' : '#ff5555aa'};
+  `;
+
+  const subtitle = document.createElement('div');
+  subtitle.textContent = won ? "The enemy's Core Spire has fallen." : 'Your Core Spire has fallen.';
+  subtitle.style.cssText = 'font-size: 16px; color: #dff3ff;';
+
+  overlay.append(title, subtitle);
+  app.appendChild(overlay);
+
+  rtsCamera.triggerShake(won ? 1.2 : 0.7, 0.6);
+}
+
 const clock = new THREE.Clock();
 
 function animate(): void {
@@ -399,45 +489,58 @@ function animate(): void {
   terrain.update(rawDt);
   coreZone.update(rawDt);
 
-  playerBase.updateEconomy(dt);
-  aiBase.updateEconomy(dt);
+  if (!matchOver) {
+    sunProximity.update(dt);
+    const sunState = sunProximity.snapshot();
+    applySunProximity(sunState.progress, sunState.stage);
 
-  playerBase.updateHarvesters(dt, rtsCamera.camera);
-  aiBase.updateHarvesters(dt, rtsCamera.camera);
+    playerBase.updateEconomy(dt, rtsCamera.camera);
+    aiBase.updateEconomy(dt, rtsCamera.camera);
 
-  const targetables: Targetable[] = [
-    ...dummies,
-    ...playerBase.harvesters,
-    ...playerBase.combatUnits,
-    ...aiBase.harvesters,
-    ...aiBase.combatUnits,
-  ];
-  playerBase.updateCombatUnits(dt, rtsCamera.camera, targetables);
-  aiBase.updateCombatUnits(dt, rtsCamera.camera, targetables);
+    playerBase.updateHarvesters(dt, rtsCamera.camera);
+    aiBase.updateHarvesters(dt, rtsCamera.camera);
 
-  for (const dummy of dummies) dummy.update(dt, rtsCamera.camera);
-  effects.update(rawDt);
-  convergence.update(dt);
+    const unitTargetables: Targetable[] = [
+      ...dummies,
+      ...playerBase.harvesters,
+      ...playerBase.combatUnits,
+      ...aiBase.harvesters,
+      ...aiBase.combatUnits,
+    ];
+    const combatTargetables: Targetable[] = [...unitTargetables, ...playerBase.allBuildings(), ...aiBase.allBuildings()];
+    playerBase.updateCombatUnits(dt, rtsCamera.camera, combatTargetables);
+    aiBase.updateCombatUnits(dt, rtsCamera.camera, combatTargetables);
 
-  aiController.update(dt);
+    const hazardIntensity = sunState.stage === 'critical' ? 2 : 1;
+    coreEnergyWave.update(dt, unitTargetables, coreZone.group.position, hazardIntensity);
 
-  fogOfWar.update(playerBase.visionSources());
-  for (const harvester of aiBase.harvesters) harvester.mesh.visible = fogOfWar.isVisible(harvester.position);
-  for (const unit of aiBase.combatUnits) unit.mesh.visible = fogOfWar.isVisible(unit.position);
-  for (const building of aiBase.allBuildings()) building.mesh.visible = fogOfWar.isVisible(building.position);
-  for (const dummy of dummies) dummy.mesh.visible = fogOfWar.isVisible(dummy.position);
+    for (const dummy of dummies) dummy.update(dt, rtsCamera.camera);
+    effects.update(rawDt);
+    convergence.update(dt);
 
-  selection.prune();
-  updateSelectionHUD();
+    aiController.update(dt);
 
-  hud.update({
-    coreEnergy: playerBase.economy.coreEnergy,
-    factionResource: playerBase.economy.factionResource,
-    factionResourceLabel: FACTION.factionResourceName,
-    unitCount: playerBase.harvesters.length + playerBase.combatUnits.length,
-    supplyUsed: playerBase.supplyUsed(),
-    panels: PRODUCER_BUILDING_IDS.map(buildPanelState),
-  });
+    fogOfWar.update(playerBase.visionSources());
+    for (const harvester of aiBase.harvesters) harvester.mesh.visible = fogOfWar.isVisible(harvester.position);
+    for (const unit of aiBase.combatUnits) unit.mesh.visible = fogOfWar.isVisible(unit.position);
+    for (const building of aiBase.allBuildings()) building.mesh.visible = fogOfWar.isVisible(building.position);
+    for (const dummy of dummies) dummy.mesh.visible = fogOfWar.isVisible(dummy.position);
+
+    selection.prune();
+    updateSelectionHUD();
+
+    hud.update({
+      coreEnergy: playerBase.economy.coreEnergy,
+      factionResource: playerBase.economy.factionResource,
+      factionResourceLabel: FACTION.factionResourceName,
+      unitCount: playerBase.harvesters.length + playerBase.combatUnits.length,
+      supplyUsed: playerBase.supplyUsed(),
+      panels: PRODUCER_BUILDING_IDS.map(buildPanelState),
+    });
+
+    if (aiBase.isDefeated()) showMatchEndScreen(true);
+    else if (playerBase.isDefeated()) showMatchEndScreen(false);
+  }
 
   rtsCamera.update(rawDt, input, window.innerWidth, window.innerHeight);
   renderer.render(scene, rtsCamera.camera);

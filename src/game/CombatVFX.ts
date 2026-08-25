@@ -144,6 +144,60 @@ export class EffectManager {
     }
   }
 
+  /** Cyber-Nexus building-death VFX per §6: the structure disassembles into blue pixel squares that dissolve upward. Weightier than a unit death. */
+  spawnBuildingDestroyed(center: THREE.Vector3, radius: number): void {
+    const point = center.clone();
+    point.y = radius * 0.6;
+
+    const flashMaterial = new THREE.MeshBasicMaterial({ color: 0xdff3ff, transparent: true, opacity: 1 });
+    const flashGeometry = new THREE.SphereGeometry(radius * 0.5, 12, 12);
+    const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+    flash.position.copy(point);
+    this.scene.add(flash);
+    this.active.push({
+      life: 0,
+      maxLife: 0.4,
+      tick: (t) => {
+        flash.scale.setScalar(1 + t * 4);
+        flashMaterial.opacity = 1 - t;
+      },
+      dispose: () => {
+        this.scene.remove(flash);
+        flashGeometry.dispose();
+        flashMaterial.dispose();
+      },
+    });
+
+    const shardCount = 22;
+    for (let i = 0; i < shardCount; i++) {
+      const angle = (i / shardCount) * Math.PI * 2 + Math.random() * 0.3;
+      const speed = 2 + Math.random() * 3;
+      const direction = new THREE.Vector3(Math.cos(angle), 0.6 + Math.random() * 0.9, Math.sin(angle));
+      const size = 0.12 + Math.random() * 0.22;
+      const shardMaterial = new THREE.MeshBasicMaterial({ color: 0x4fc3ff, transparent: true, opacity: 1 });
+      const shard = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), shardMaterial);
+      const startPos = point.clone().add(new THREE.Vector3((Math.random() - 0.5) * radius, 0, (Math.random() - 0.5) * radius));
+      shard.position.copy(startPos);
+      this.scene.add(shard);
+      const maxLife = 0.6 + Math.random() * 0.5;
+      this.active.push({
+        life: 0,
+        maxLife,
+        tick: (t) => {
+          shard.position.copy(startPos).addScaledVector(direction, t * speed);
+          shard.rotation.x += 0.35;
+          shard.rotation.y += 0.35;
+          shardMaterial.opacity = 1 - t;
+        },
+        dispose: () => {
+          this.scene.remove(shard);
+          shard.geometry.dispose();
+          shardMaterial.dispose();
+        },
+      });
+    }
+  }
+
   update(dt: number): void {
     for (let i = this.active.length - 1; i >= 0; i--) {
       const effect = this.active[i];

@@ -7,8 +7,9 @@ export interface BuildingConfig {
   buildTimeSec: number;
   /** Placeholder footprint radius for the placeholder mesh/placement radius. */
   footprint: number;
-  /** Engine-only vision radius (fog of war), not part of the design doc's cost tables. */
+  /** Engine-only vision/HP stats, not part of the design doc's cost tables. */
   visionRadius: number;
+  maxHp: number;
   color: number;
   /** Unit ids this building can produce. Empty = no production (e.g. a defense tower). */
   produces: string[];
@@ -25,6 +26,7 @@ export const CYBER_NEXUS_BUILDINGS: Record<string, BuildingConfig> = {
     buildTimeSec: 90,
     footprint: 3,
     visionRadius: 16,
+    maxHp: 800,
     color: 0x9fd8ff,
     produces: ['flux-harvester'],
     dropoffResource: 'coreEnergy',
@@ -37,6 +39,7 @@ export const CYBER_NEXUS_BUILDINGS: Record<string, BuildingConfig> = {
     buildTimeSec: 25,
     footprint: 2,
     visionRadius: 10,
+    maxHp: 200,
     color: 0x2ea3ff,
     produces: [],
     dropoffResource: 'factionResource',
@@ -49,6 +52,7 @@ export const CYBER_NEXUS_BUILDINGS: Record<string, BuildingConfig> = {
     buildTimeSec: 35,
     footprint: 2.5,
     visionRadius: 10,
+    maxHp: 250,
     color: 0x3fb0ff,
     produces: ['sentinel-drone', 'phase-trooper'],
     dropoffResource: null,
@@ -61,6 +65,7 @@ export const CYBER_NEXUS_BUILDINGS: Record<string, BuildingConfig> = {
     buildTimeSec: 45,
     footprint: 3,
     visionRadius: 10,
+    maxHp: 300,
     color: 0x1f7fcc,
     produces: ['arc-walker'],
     dropoffResource: null,

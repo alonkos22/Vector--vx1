@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { BuildingConfig } from '../config/buildings';
+import type { Targetable } from './Targetable';
+import { HealthBar } from './HealthBar';
 
 const MAX_QUEUE_SIZE = 5;
 
@@ -9,18 +11,26 @@ interface QueuedItem {
   remaining: number;
 }
 
-/** A placed building: handles the under-construction visual and a multi-item FIFO production queue. */
-export class Building {
+/** A placed building: handles the under-construction visual, a multi-item FIFO production queue, and (once built) HP as a Targetable. */
+export class Building implements Targetable {
   readonly config: BuildingConfig;
+  readonly ownerId: string;
   readonly mesh: THREE.Mesh;
   readonly position: THREE.Vector3;
   isComplete: boolean;
+  maxHp: number;
+  hp: number;
+
+  private readonly healthBar: HealthBar;
   private constructionRemaining: number;
   private readonly productionQueue: QueuedItem[] = [];
 
-  constructor(config: BuildingConfig, position: THREE.Vector3, prebuilt = false) {
+  constructor(config: BuildingConfig, ownerId: string, position: THREE.Vector3, prebuilt = false) {
     this.config = config;
+    this.ownerId = ownerId;
     this.position = position.clone();
+    this.maxHp = config.maxHp;
+    this.hp = config.maxHp;
 
     const geometry = new THREE.CylinderGeometry(config.footprint, config.footprint * 1.15, config.footprint * 1.6, 6);
     const material = new THREE.MeshStandardMaterial({
@@ -38,12 +48,29 @@ export class Building {
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
     this.mesh.scale.setScalar(prebuilt ? 1 : 0.5);
+    this.mesh.userData.buildingRef = this;
+
+    this.healthBar = new HealthBar(config.footprint * 1.6 + 0.6, 1.6);
+    this.mesh.add(this.healthBar.group);
+    this.healthBar.update(1);
 
     this.isComplete = prebuilt;
     this.constructionRemaining = prebuilt ? 0 : config.buildTimeSec;
   }
 
-  update(dt: number): void {
+  isAlive(): boolean {
+    return this.hp > 0;
+  }
+
+  takeDamage(amount: number): void {
+    if (!this.isAlive()) return;
+    this.hp = Math.max(0, this.hp - amount);
+    this.healthBar.update(this.hp / this.maxHp);
+  }
+
+  update(dt: number, camera?: THREE.Camera): void {
+    if (camera) this.healthBar.faceCamera(camera);
+
     if (!this.isComplete) {
       this.constructionRemaining -= dt;
       const progress = 1 - Math.max(this.constructionRemaining, 0) / this.config.buildTimeSec;
