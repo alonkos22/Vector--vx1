@@ -812,6 +812,407 @@ function buildThermalShockEngine(): THREE.Object3D {
   return withShadows(group);
 }
 
+// ---------------------------------------------------------------------------
+// Verdant Wilds — rough bark and chitin, matte moss green, bioluminescent
+// lime spore glow, thorny/organic silhouettes.
+// ---------------------------------------------------------------------------
+
+function buildRootTender(): THREE.Object3D {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0x3a5a2a, emissive: 0x7fd94f, emissiveIntensity: 0.55, roughness: 0.85, metalness: 0.05 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.6, 6, 10), material);
+  body.rotation.z = Math.PI / 2;
+  body.position.y = 0.55;
+  group.add(body);
+  const sacMaterial = new THREE.MeshStandardMaterial({ color: 0x8fd45f, emissive: 0x8fd45f, emissiveIntensity: 0.7, roughness: 0.4, metalness: 0 });
+  const sac = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), sacMaterial);
+  sac.position.set(0, 0.75, -0.3);
+  group.add(sac);
+  const legGeo = new THREE.ConeGeometry(0.08, 0.35, 5);
+  for (const side of [-1, 1] as const) {
+    const leg = new THREE.Mesh(legGeo, material);
+    leg.position.set(side * 0.3, 0.2, 0.2);
+    group.add(leg);
+  }
+  return withShadows(group);
+}
+
+/** Thorn Skitterling: small quick many-legged bark-beetle with a spiked back ridge. */
+function buildThornSkitterling(): THREE.Object3D {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0x2d4520, emissive: 0x4a8f3d, emissiveIntensity: 0.4, roughness: 0.85, metalness: 0.05 });
+  const thornMaterial = new THREE.MeshStandardMaterial({ color: 0x1a2b12, roughness: 0.7, metalness: 0.05 });
+
+  const body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.32, 0), material);
+  body.scale.set(1.3, 0.75, 1);
+  body.position.y = 0.4;
+  group.add(body);
+
+  const thornGeo = new THREE.ConeGeometry(0.05, 0.22, 4);
+  for (const x of [-0.15, 0, 0.15]) {
+    const thorn = new THREE.Mesh(thornGeo, thornMaterial);
+    thorn.position.set(x, 0.62, 0);
+    group.add(thorn);
+  }
+
+  const legGeo = new THREE.CylinderGeometry(0.03, 0.045, 0.3, 5);
+  const legOffsets: Array<[number, number]> = [
+    [-0.18, -0.2],
+    [0.18, -0.2],
+    [-0.18, 0.2],
+    [0.18, 0.2],
+  ];
+  for (const [x, z] of legOffsets) {
+    const leg = new THREE.Mesh(legGeo, thornMaterial);
+    leg.position.set(x, 0.15, z);
+    group.add(leg);
+  }
+
+  return withShadows(group);
+}
+
+/** Spore Mystic: hunched floating plant-shaman wrapped in vines, a bulbous spore pod staff. */
+function buildSporeMystic(): THREE.Object3D {
+  const group = new THREE.Group();
+  const barkMaterial = new THREE.MeshStandardMaterial({ color: 0x4a3a24, roughness: 0.85, metalness: 0.05 });
+  const leafMaterial = new THREE.MeshStandardMaterial({ color: 0x3a6b2e, roughness: 0.8, metalness: 0.05 });
+  const sporeMaterial = new THREE.MeshBasicMaterial({ color: 0x8fd45f });
+
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.65, 4, 8), barkMaterial);
+  body.position.y = 0.85;
+  group.add(body);
+
+  const cloak = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.8, 7), leafMaterial);
+  cloak.position.y = 0.6;
+  group.add(cloak);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), barkMaterial);
+  head.position.set(0, 1.3, 0);
+  group.add(head);
+
+  const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.3, 6), barkMaterial);
+  staff.position.set(0.38, 0.95, 0);
+  group.add(staff);
+
+  const pod = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), sporeMaterial);
+  pod.position.set(0.38, 1.65, 0);
+  group.add(pod);
+
+  return withShadows(group);
+}
+
+/** Bramble Colossus: hulking beast of woven roots and thorn-vine arms, a glowing sap core. */
+function buildBrambleColossus(): THREE.Object3D {
+  const group = new THREE.Group();
+  const barkMaterial = new THREE.MeshStandardMaterial({ color: 0x3a2c1a, roughness: 0.9, metalness: 0.03 });
+  const sapMaterial = new THREE.MeshStandardMaterial({ color: 0x8fd45f, emissive: 0x8fd45f, emissiveIntensity: 0.9, roughness: 0.4, metalness: 0 });
+  const thornMaterial = new THREE.MeshStandardMaterial({ color: 0x1a2b12, roughness: 0.7, metalness: 0.05 });
+
+  const body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.75, 0), barkMaterial);
+  body.position.y = 1.3;
+  group.add(body);
+
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), sapMaterial);
+  core.position.set(0, 1.3, 0.4);
+  group.add(core);
+
+  const armGeo = new THREE.CylinderGeometry(0.16, 0.24, 1.1, 6);
+  for (const side of [-1, 1] as const) {
+    const arm = new THREE.Mesh(armGeo, barkMaterial);
+    arm.position.set(side * 0.85, 1.15, 0);
+    arm.rotation.z = side * 0.25;
+    group.add(arm);
+  }
+
+  const thornGeo = new THREE.ConeGeometry(0.07, 0.3, 4);
+  for (const [x, y, z] of [
+    [0.2, 1.75, 0.3],
+    [-0.2, 1.75, 0.3],
+    [0, 1.85, -0.2],
+  ] as const) {
+    const thorn = new THREE.Mesh(thornGeo, thornMaterial);
+    thorn.position.set(x, y, z);
+    group.add(thorn);
+  }
+
+  const legGeo = new THREE.CylinderGeometry(0.2, 0.26, 0.75, 6);
+  for (const side of [-1, 1] as const) {
+    const leg = new THREE.Mesh(legGeo, barkMaterial);
+    leg.position.set(side * 0.35, 0.4, 0);
+    group.add(leg);
+  }
+
+  return withShadows(group);
+}
+
+/** Bramblehive Matron (3x Thorn Skitterling fusion): a bloated brood-mother skitterling trailing a cluster of spore sacs. */
+function buildBramblehiveMatron(): THREE.Object3D {
+  const group = buildThornSkitterling();
+  group.scale.setScalar(1.6);
+  const sacMaterial = new THREE.MeshStandardMaterial({ color: 0x8fd45f, emissive: 0x8fd45f, emissiveIntensity: 0.8, roughness: 0.4, metalness: 0 });
+  const sacGeo = new THREE.SphereGeometry(0.14, 8, 8);
+  for (const [x, y, z] of [
+    [-0.25, 0.35, -0.35],
+    [0.25, 0.35, -0.35],
+    [0, 0.45, -0.5],
+  ] as const) {
+    const sac = new THREE.Mesh(sacGeo, sacMaterial);
+    sac.position.set(x, y, z);
+    group.add(sac);
+  }
+  return group;
+}
+
+/** Verdant Devourer (Spore Mystic + Bramble Colossus fusion): a massive maw-jawed plant predator with venus-flytrap head. */
+function buildVerdantDevourer(): THREE.Object3D {
+  const group = new THREE.Group();
+  const barkMaterial = new THREE.MeshStandardMaterial({ color: 0x2d4520, roughness: 0.88, metalness: 0.03 });
+  const jawMaterial = new THREE.MeshStandardMaterial({ color: 0x6b1f2a, roughness: 0.6, metalness: 0.05 });
+  const sapMaterial = new THREE.MeshStandardMaterial({ color: 0x8fd45f, emissive: 0x8fd45f, emissiveIntensity: 1.0, roughness: 0.3, metalness: 0 });
+
+  const body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.95, 0), barkMaterial);
+  body.position.y = 1.6;
+  group.add(body);
+
+  const jawGeo = new THREE.ConeGeometry(0.5, 0.9, 6);
+  for (const [side, tilt] of [
+    [1, 0.35],
+    [-1, -0.35],
+  ] as const) {
+    const jaw = new THREE.Mesh(jawGeo, jawMaterial);
+    jaw.position.set(0, 2.1, side * 0.3);
+    jaw.rotation.x = tilt;
+    group.add(jaw);
+  }
+
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), sapMaterial);
+  core.position.set(0, 1.6, 0.5);
+  group.add(core);
+
+  const armGeo = new THREE.CylinderGeometry(0.2, 0.3, 1.3, 6);
+  for (const side of [-1, 1] as const) {
+    const arm = new THREE.Mesh(armGeo, barkMaterial);
+    arm.position.set(side * 1.0, 1.4, 0);
+    arm.rotation.z = side * 0.3;
+    group.add(arm);
+  }
+
+  const legGeo = new THREE.CylinderGeometry(0.25, 0.32, 0.9, 6);
+  for (const side of [-1, 1] as const) {
+    const leg = new THREE.Mesh(legGeo, barkMaterial);
+    leg.position.set(side * 0.42, 0.5, 0);
+    group.add(leg);
+  }
+
+  return withShadows(group);
+}
+
+// ---------------------------------------------------------------------------
+// Umbral Voidkin — dark obsidian-glass, semi-glossy void-black, violet/
+// magenta glow, jagged crystalline silhouettes.
+// ---------------------------------------------------------------------------
+
+function buildHuskDrifter(): THREE.Object3D {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0x2a1a3a, emissive: 0x9f6fd0, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.25 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.6, 6, 10), material);
+  body.position.y = 0.75;
+  group.add(body);
+  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xd94fd9 });
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeMaterial);
+  eye.position.set(0, 0.9, 0.36);
+  group.add(eye);
+  const shardGeo = new THREE.ConeGeometry(0.08, 0.3, 5);
+  for (const side of [-1, 1] as const) {
+    const shard = new THREE.Mesh(shardGeo, material);
+    shard.rotation.z = side * 0.7;
+    shard.position.set(side * 0.4, 0.6, -0.2);
+    group.add(shard);
+  }
+  return withShadows(group);
+}
+
+/** Shade Stalker: lean crouched shadow-assassin, jagged crystal claws, no visible face beneath a hooded void-mist head. */
+function buildShadeStalker(): THREE.Object3D {
+  const group = new THREE.Group();
+  const shadowMaterial = new THREE.MeshStandardMaterial({ color: 0x1a0f28, roughness: 0.4, metalness: 0.2 });
+  const glowMaterial = new THREE.MeshBasicMaterial({ color: 0xd94fd9 });
+  const clawMaterial = new THREE.MeshStandardMaterial({ color: 0x7a3fb0, emissive: 0x7a3fb0, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.2 });
+
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.55, 4, 8), shadowMaterial);
+  torso.position.y = 0.85;
+  torso.rotation.x = 0.2;
+  group.add(torso);
+
+  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 6), shadowMaterial);
+  hood.position.set(0, 1.25, 0.05);
+  group.add(hood);
+
+  const eyes = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), glowMaterial);
+  eyes.position.set(0, 1.22, 0.2);
+  group.add(eyes);
+
+  const clawGeo = new THREE.ConeGeometry(0.05, 0.35, 4);
+  for (const side of [-1, 1] as const) {
+    const claw = new THREE.Mesh(clawGeo, clawMaterial);
+    claw.rotation.z = side * (Math.PI / 2.3);
+    claw.position.set(side * 0.35, 0.75, 0.15);
+    group.add(claw);
+  }
+
+  return withShadows(group);
+}
+
+/** Nullweaver: floating hollow-robed void mage encircled by orbiting dark crystal shards. */
+function buildNullweaver(): THREE.Object3D {
+  const group = new THREE.Group();
+  const robeMaterial = new THREE.MeshStandardMaterial({ color: 0x2a1a3a, roughness: 0.35, metalness: 0.25 });
+  const shardMaterial = new THREE.MeshStandardMaterial({ color: 0x9f6fd0, emissive: 0x9f6fd0, emissiveIntensity: 0.9, transparent: true, opacity: 0.75, roughness: 0.1, metalness: 0.2 });
+
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.1, 8), robeMaterial);
+  body.position.y = 0.9;
+  group.add(body);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), robeMaterial);
+  head.position.y = 1.6;
+  group.add(head);
+
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: 0xd94fd9 }));
+  eye.position.set(0, 1.6, 0.17);
+  group.add(eye);
+
+  const shardGeo = new THREE.OctahedronGeometry(0.12, 0);
+  const orbitCount = 3;
+  for (let i = 0; i < orbitCount; i++) {
+    const angle = (i / orbitCount) * Math.PI * 2;
+    const shard = new THREE.Mesh(shardGeo, shardMaterial);
+    shard.position.set(Math.cos(angle) * 0.55, 1.1 + Math.sin(angle) * 0.15, Math.sin(angle) * 0.55);
+    group.add(shard);
+  }
+
+  return withShadows(group);
+}
+
+/** Voidmaw Horror: hunched multi-limbed void beast with a gaping crystalline maw on its chest. */
+function buildVoidmawHorror(): THREE.Object3D {
+  const group = new THREE.Group();
+  const hideMaterial = new THREE.MeshStandardMaterial({ color: 0x1a0f28, roughness: 0.45, metalness: 0.2 });
+  const mawMaterial = new THREE.MeshStandardMaterial({ color: 0xd94fd9, emissive: 0xd94fd9, emissiveIntensity: 1.0, roughness: 0.2, metalness: 0.1 });
+  const crystalMaterial = new THREE.MeshStandardMaterial({ color: 0x7a3fb0, emissive: 0x7a3fb0, emissiveIntensity: 0.6, roughness: 0.2, metalness: 0.3 });
+
+  const body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.7, 0), hideMaterial);
+  body.position.y = 1.25;
+  group.add(body);
+
+  const maw = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.32, 12), mawMaterial);
+  maw.position.set(0, 1.3, 0.55);
+  group.add(maw);
+
+  const spikeGeo = new THREE.ConeGeometry(0.09, 0.4, 5);
+  for (const [x, y, z] of [
+    [0.4, 1.75, 0],
+    [-0.4, 1.75, 0],
+    [0, 1.85, -0.3],
+  ] as const) {
+    const spike = new THREE.Mesh(spikeGeo, crystalMaterial);
+    spike.position.set(x, y, z);
+    group.add(spike);
+  }
+
+  const armGeo = new THREE.CylinderGeometry(0.13, 0.18, 1.0, 6);
+  for (const side of [-1, 1] as const) {
+    const arm = new THREE.Mesh(armGeo, hideMaterial);
+    arm.position.set(side * 0.75, 1.1, 0);
+    arm.rotation.z = side * 0.3;
+    group.add(arm);
+  }
+
+  const legGeo = new THREE.CylinderGeometry(0.18, 0.24, 0.75, 6);
+  for (const side of [-1, 1] as const) {
+    const leg = new THREE.Mesh(legGeo, hideMaterial);
+    leg.position.set(side * 0.32, 0.45, 0);
+    group.add(leg);
+  }
+
+  return withShadows(group);
+}
+
+/** Shade Legion (3x Shade Stalker fusion): three Shade Stalkers fused shoulder-to-shoulder, sharing a single void-mist cloak. */
+function buildShadeLegion(): THREE.Object3D {
+  const group = new THREE.Group();
+  const shadowMaterial = new THREE.MeshStandardMaterial({ color: 0x1a0f28, roughness: 0.4, metalness: 0.2 });
+  const glowMaterial = new THREE.MeshBasicMaterial({ color: 0xd94fd9 });
+
+  const offsets: Array<[number, number]> = [
+    [0, 0],
+    [-0.4, -0.15],
+    [0.4, -0.15],
+  ];
+  for (const [x, z] of offsets) {
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.5, 4, 8), shadowMaterial);
+    torso.position.set(x, 0.8, z);
+    group.add(torso);
+    const hood = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.35, 6), shadowMaterial);
+    hood.position.set(x, 1.15, z + 0.05);
+    group.add(hood);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 6), glowMaterial);
+    eye.position.set(x, 1.12, z + 0.18);
+    group.add(eye);
+  }
+
+  return withShadows(group);
+}
+
+/** Oblivion Warden (Nullweaver + Voidmaw Horror fusion): a towering void titan wreathed in a crystalline halo of shattered reality. */
+function buildOblivionWarden(): THREE.Object3D {
+  const group = new THREE.Group();
+  const hideMaterial = new THREE.MeshStandardMaterial({ color: 0x150a20, roughness: 0.4, metalness: 0.25 });
+  const mawMaterial = new THREE.MeshStandardMaterial({ color: 0xd94fd9, emissive: 0xd94fd9, emissiveIntensity: 1.1, roughness: 0.2, metalness: 0.1 });
+  const crystalMaterial = new THREE.MeshStandardMaterial({
+    color: 0x9f6fd0,
+    emissive: 0x9f6fd0,
+    emissiveIntensity: 0.9,
+    transparent: true,
+    opacity: 0.7,
+    roughness: 0.1,
+    metalness: 0.2,
+  });
+
+  const body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.95, 0), hideMaterial);
+  body.position.y = 2.0;
+  group.add(body);
+
+  const maw = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.42, 14), mawMaterial);
+  maw.position.set(0, 2.05, 0.75);
+  group.add(maw);
+
+  const shardGeo = new THREE.OctahedronGeometry(0.2, 0);
+  const shardCount = 5;
+  for (let i = 0; i < shardCount; i++) {
+    const angle = (i / shardCount) * Math.PI * 2;
+    const shard = new THREE.Mesh(shardGeo, crystalMaterial);
+    shard.position.set(Math.cos(angle) * 1.2, 2.0 + Math.sin(angle) * 0.3, Math.sin(angle) * 1.2);
+    group.add(shard);
+  }
+
+  const armGeo = new THREE.CylinderGeometry(0.22, 0.3, 1.5, 6);
+  for (const side of [-1, 1] as const) {
+    const arm = new THREE.Mesh(armGeo, hideMaterial);
+    arm.position.set(side * 1.15, 1.7, 0);
+    arm.rotation.z = side * 0.3;
+    group.add(arm);
+  }
+
+  const legGeo = new THREE.CylinderGeometry(0.3, 0.38, 1.2, 6);
+  for (const side of [-1, 1] as const) {
+    const leg = new THREE.Mesh(legGeo, hideMaterial);
+    leg.position.set(side * 0.5, 0.7, 0);
+    group.add(leg);
+  }
+
+  return withShadows(group);
+}
+
 const BUILDERS: Record<string, () => THREE.Object3D> = {
   // Cyber-Nexus
   'flux-harvester': buildFluxHarvester,
@@ -840,6 +1241,20 @@ const BUILDERS: Record<string, () => THREE.Object3D> = {
   'boiler-juggernaut': buildBoilerJuggernaut,
   'forge-walker': buildForgeWalker,
   'thermal-shock-engine': buildThermalShockEngine,
+  // Verdant Wilds
+  'root-tender': buildRootTender,
+  'thorn-skitterling': buildThornSkitterling,
+  'spore-mystic': buildSporeMystic,
+  'bramble-colossus': buildBrambleColossus,
+  'bramblehive-matron': buildBramblehiveMatron,
+  'verdant-devourer': buildVerdantDevourer,
+  // Umbral Voidkin
+  'husk-drifter': buildHuskDrifter,
+  'shade-stalker': buildShadeStalker,
+  nullweaver: buildNullweaver,
+  'voidmaw-horror': buildVoidmawHorror,
+  'shade-legion': buildShadeLegion,
+  'oblivion-warden': buildOblivionWarden,
 };
 
 /** Placeholder combat-unit silhouettes, one distinct shape per unit type matching the detailed unit catalog's visual descriptions. */

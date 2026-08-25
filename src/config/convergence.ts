@@ -127,6 +127,56 @@ export const CONVERGENCE_BY_FACTION: Record<string, ConvergenceRecipe[]> = {
       requiresBuildingRadius: 0,
     },
   ],
+
+  'verdant-wilds': [
+    {
+      id: 'bramblehive-matron',
+      name: 'Bramblehive Matron',
+      mechanicName: 'Symbiosis',
+      inputs: { 'thorn-skitterling': 3 },
+      outputUnitId: 'bramblehive-matron',
+      extraCoreEnergyCost: 30,
+      channelTimeSec: 3,
+      requiresBuildingId: null,
+      requiresBuildingRadius: 0,
+    },
+    {
+      id: 'verdant-devourer',
+      name: 'Verdant Devourer',
+      mechanicName: 'Symbiosis',
+      inputs: { 'spore-mystic': 1, 'bramble-colossus': 1 },
+      outputUnitId: 'verdant-devourer',
+      extraCoreEnergyCost: 45,
+      channelTimeSec: 3,
+      requiresBuildingId: null,
+      requiresBuildingRadius: 0,
+    },
+  ],
+
+  'umbral-voidkin': [
+    {
+      id: 'shade-legion',
+      name: 'Shade Legion',
+      mechanicName: 'Assimilation',
+      inputs: { 'shade-stalker': 3 },
+      outputUnitId: 'shade-legion',
+      extraCoreEnergyCost: 30,
+      channelTimeSec: 2.5,
+      requiresBuildingId: null,
+      requiresBuildingRadius: 0,
+    },
+    {
+      id: 'oblivion-warden',
+      name: 'Oblivion Warden',
+      mechanicName: 'Assimilation',
+      inputs: { nullweaver: 1, 'voidmaw-horror': 1 },
+      outputUnitId: 'oblivion-warden',
+      extraCoreEnergyCost: 50,
+      channelTimeSec: 2.5,
+      requiresBuildingId: null,
+      requiresBuildingRadius: 0,
+    },
+  ],
 };
 
 /** Kept for the player-facing UI which always plays Cyber-Nexus. */

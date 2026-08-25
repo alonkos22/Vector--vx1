@@ -1,5 +1,5 @@
 /** Attack VFX flavor key (§6), dispatched by EffectManager.spawnAttackHit. */
-export type AttackVfxStyle = 'laser' | 'lava-arc' | 'light-beam' | 'projectile';
+export type AttackVfxStyle = 'laser' | 'lava-arc' | 'light-beam' | 'projectile' | 'spore-burst' | 'shadow-bolt';
 
 /** Per-faction identity: display name, resource label, colors, home biome, and economy shape. */
 export interface FactionConfig {
@@ -76,5 +76,29 @@ export const FACTIONS: Record<string, FactionConfig> = {
     attackVfxStyle: 'projectile',
     economyMode: 'harvester',
     harvesterUnitId: 'rustling',
+  },
+  'verdant-wilds': {
+    id: 'verdant-wilds',
+    name: 'Verdant Wilds',
+    factionResourceName: 'Spore Marrow',
+    colorPrimary: 0x4a8f3d,
+    colorSecondary: 0x8d6e4a,
+    biomeId: 'verdant-wilds',
+    convergenceMechanicName: 'Symbiosis',
+    attackVfxStyle: 'spore-burst',
+    economyMode: 'harvester',
+    harvesterUnitId: 'root-tender',
+  },
+  'umbral-voidkin': {
+    id: 'umbral-voidkin',
+    name: 'Umbral Voidkin',
+    factionResourceName: 'Void Ichor',
+    colorPrimary: 0x6a2fa0,
+    colorSecondary: 0xd94fd9,
+    biomeId: 'umbral-voidkin',
+    convergenceMechanicName: 'Assimilation',
+    attackVfxStyle: 'shadow-bolt',
+    economyMode: 'harvester',
+    harvesterUnitId: 'husk-drifter',
   },
 };

@@ -48,4 +48,20 @@ export const BIOMES: Record<string, BiomeConfig> = {
     roughness: 0.4,
     metalness: 0.2,
   },
+  'verdant-wilds': {
+    id: 'verdant-wilds',
+    name: 'Overgrown Thicket',
+    groundColor: 0x2a3d1f,
+    veinColor: 0x7fd94f,
+    roughness: 0.75,
+    metalness: 0.05,
+  },
+  'umbral-voidkin': {
+    id: 'umbral-voidkin',
+    name: 'Shattered Rift',
+    groundColor: 0x1a1220,
+    veinColor: 0xb84fd9,
+    roughness: 0.3,
+    metalness: 0.25,
+  },
 };

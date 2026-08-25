@@ -34,12 +34,12 @@ const MAP_HALF_EXTENT = 100;
 const PLAYER_FACTION_ID = 'cyber-nexus';
 /**
  * The AI opponent's faction (Milestone 9's live proof that PlayerBase/
- * AIController are faction-agnostic). Frost-Forged: harvester-based like
- * Cyber-Nexus (verifiable with the same established testing pattern) with
- * strong visual/flavor contrast. Try 'pyroliths' or 'solari-archons' here to
- * exercise the other factions instead — no other code changes needed.
+ * AIController are faction-agnostic): picked at random from every other
+ * faction on each page load, so all 5 non-player factions actually get
+ * played rather than only ever facing one hardcoded opponent.
  */
-const AI_FACTION_ID = 'frost-forged';
+const AI_CANDIDATE_FACTION_IDS = Object.keys(FACTIONS).filter((id) => id !== PLAYER_FACTION_ID);
+const AI_FACTION_ID = AI_CANDIDATE_FACTION_IDS[Math.floor(Math.random() * AI_CANDIDATE_FACTION_IDS.length)];
 const FACTION = FACTIONS[PLAYER_FACTION_ID];
 const PLAYER_BASE_POSITION = new THREE.Vector3(-55, 0, -55);
 const AI_BASE_POSITION = new THREE.Vector3(55, 0, 55);

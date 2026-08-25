@@ -22,6 +22,8 @@ export class EffectManager {
     'lava-arc': (from, to) => this.spawnLavaArcHit(from, to),
     'light-beam': (from, to) => this.spawnLightBeamHit(from, to),
     projectile: (from, to) => this.spawnProjectileHit(from, to),
+    'spore-burst': (from, to) => this.spawnSporeBurstHit(from, to),
+    'shadow-bolt': (from, to) => this.spawnShadowBoltHit(from, to),
   };
 
   constructor(scene: THREE.Scene) {
@@ -222,6 +224,115 @@ export class EffectManager {
         this.scene.remove(cloud);
         cloud.geometry.dispose();
         cloudMaterial.dispose();
+      },
+    });
+  }
+
+  /** Verdant Wilds attack VFX: a lobbed spore pod that bursts into a cloud of drifting toxic spore motes on impact. */
+  spawnSporeBurstHit(from: THREE.Vector3, to: THREE.Vector3): void {
+    const arcMid = from.clone().lerp(to, 0.5);
+    arcMid.y += 0.8;
+    const curve = new THREE.QuadraticBezierCurve3(from, arcMid, to);
+    const geometry = new THREE.TubeGeometry(curve, 10, 0.06, 6, false);
+    const material = new THREE.MeshBasicMaterial({ color: 0x7fd94f, transparent: true, opacity: 0.85 });
+    const pod = new THREE.Mesh(geometry, material);
+    this.scene.add(pod);
+    this.active.push({
+      life: 0,
+      maxLife: 0.22,
+      tick: (t) => {
+        material.opacity = 0.85 * (1 - t);
+      },
+      dispose: () => {
+        this.scene.remove(pod);
+        geometry.dispose();
+        material.dispose();
+      },
+    });
+
+    const moteCount = 8;
+    for (let i = 0; i < moteCount; i++) {
+      const angle = (i / moteCount) * Math.PI * 2;
+      const direction = new THREE.Vector3(Math.cos(angle), 0.3 + Math.random() * 0.6, Math.sin(angle));
+      const moteMaterial = new THREE.MeshBasicMaterial({ color: 0x8fd45f, transparent: true, opacity: 0.9 });
+      const mote = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), moteMaterial);
+      mote.position.copy(to);
+      this.scene.add(mote);
+      const maxLife = 0.3 + Math.random() * 0.25;
+      this.active.push({
+        life: 0,
+        maxLife,
+        tick: (t) => {
+          mote.position.copy(to).addScaledVector(direction, t * 1.5);
+          moteMaterial.opacity = 0.9 * (1 - t);
+        },
+        dispose: () => {
+          this.scene.remove(mote);
+          mote.geometry.dispose();
+          moteMaterial.dispose();
+        },
+      });
+    }
+  }
+
+  /** Umbral Voidkin attack VFX: a jagged violet shadow bolt whose impact tears open into wisping void tendrils. */
+  spawnShadowBoltHit(from: THREE.Vector3, to: THREE.Vector3): void {
+    const geometry = new THREE.BufferGeometry().setFromPoints([from, to]);
+    const material = new THREE.LineBasicMaterial({ color: 0x9f6fd0, transparent: true, opacity: 0.9 });
+    const bolt = new THREE.Line(geometry, material);
+    this.scene.add(bolt);
+    this.active.push({
+      life: 0,
+      maxLife: 0.14,
+      tick: (t) => {
+        material.opacity = 0.9 * (1 - t);
+      },
+      dispose: () => {
+        this.scene.remove(bolt);
+        geometry.dispose();
+        material.dispose();
+      },
+    });
+
+    const tendrilCount = 6;
+    for (let i = 0; i < tendrilCount; i++) {
+      const angle = (i / tendrilCount) * Math.PI * 2;
+      const direction = new THREE.Vector3(Math.cos(angle), 0.2 + Math.random() * 0.5, Math.sin(angle));
+      const tendrilMaterial = new THREE.MeshBasicMaterial({ color: 0x6a2fa0, transparent: true, opacity: 0.85 });
+      const tendril = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.35, 5), tendrilMaterial);
+      tendril.position.copy(to);
+      this.scene.add(tendril);
+      const maxLife = 0.22 + Math.random() * 0.15;
+      this.active.push({
+        life: 0,
+        maxLife,
+        tick: (t) => {
+          tendril.position.copy(to).addScaledVector(direction, t * 2.0);
+          tendrilMaterial.opacity = 0.85 * (1 - t);
+        },
+        dispose: () => {
+          this.scene.remove(tendril);
+          tendril.geometry.dispose();
+          tendrilMaterial.dispose();
+        },
+      });
+    }
+
+    const voidCloudMaterial = new THREE.MeshBasicMaterial({ color: 0x2d0f4a, transparent: true, opacity: 0.6 });
+    const voidCloud = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), voidCloudMaterial);
+    voidCloud.position.copy(to);
+    this.scene.add(voidCloud);
+    this.active.push({
+      life: 0,
+      maxLife: 0.3,
+      tick: (t) => {
+        voidCloud.scale.setScalar(1 + t * 1.6);
+        voidCloudMaterial.opacity = 0.6 * (1 - t);
+      },
+      dispose: () => {
+        this.scene.remove(voidCloud);
+        voidCloud.geometry.dispose();
+        voidCloudMaterial.dispose();
       },
     });
   }

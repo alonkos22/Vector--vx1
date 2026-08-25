@@ -15,6 +15,14 @@
  * given (e.g. Tesla Archon + Nanite Weaver = Storm-Grid Colossus); the
  * other (3x-basic-unit) fusion per faction keeps a new homebrew name since
  * the source material only specified one fusion per faction.
+ *
+ * Verdant Wilds and Umbral Voidkin (added after the original 4) are
+ * homebrew factions built to the same shape and follow a balance pass
+ * across every faction: each unit's rough "value" was scored as
+ * (hp + effectiveDps * 5) / totalCost and tuned so every tier (basic ~1.0-2.1,
+ * special ~1.25-2.4, heavy ~1.5-1.9, fusion ~1.5-2.6) lands in the same band
+ * as its counterparts on the other factions, rather than eyeballing numbers
+ * per-faction in isolation.
  */
 export interface CombatStats {
   hp: number;
@@ -173,7 +181,8 @@ export const UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       selectionRadius: 1.0,
       visionRadius: 8,
       color: 0x8a2f10,
-      combat: { hp: 150, damage: 18, attackRange: 1.8, attackCooldown: 1.1, windupTime: 0.45, healthBarYOffset: 2.4 },
+      // Balance pass: was the strongest special-tier unit in the game for its cost; trimmed hp/damage.
+      combat: { hp: 110, damage: 16, attackRange: 1.8, attackCooldown: 1.1, windupTime: 0.45, healthBarYOffset: 2.4 },
     },
     'acid-drake': {
       id: 'acid-drake',
@@ -187,7 +196,8 @@ export const UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       selectionRadius: 1.0,
       visionRadius: 10,
       color: 0xcc4a10,
-      combat: { hp: 90, damage: 16, attackRange: 9, attackCooldown: 1.4, windupTime: 0.5, healthBarYOffset: 2.3 },
+      // Balance pass: was the weakest heavy-tier unit in the game for its cost (breathes acid on a wide arc, so hits 2 targets now).
+      combat: { hp: 110, damage: 19, attackRange: 9, attackCooldown: 1.4, windupTime: 0.5, healthBarYOffset: 2.3, multiTargetCount: 2 },
     },
     // --- Convergence (Conglomeration) outputs ---
     'molten-behemoth': {
@@ -217,7 +227,8 @@ export const UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       visionRadius: 9,
       color: 0xff4500,
       // Three heads breathing fire, lava and acid simultaneously -> hits multiple targets at range.
-      combat: { hp: 420, damage: 28, attackRange: 6, attackCooldown: 1.2, windupTime: 0.5, healthBarYOffset: 3.4, multiTargetCount: 2 },
+      // Balance pass: was noticeably stronger per investment than every other faction's 2-input fusion; trimmed hp/damage.
+      combat: { hp: 320, damage: 24, attackRange: 6, attackCooldown: 1.2, windupTime: 0.5, healthBarYOffset: 3.4, multiTargetCount: 2 },
     },
   },
 
@@ -248,7 +259,8 @@ export const UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       selectionRadius: 0.75,
       visionRadius: 11,
       color: 0xf4c542,
-      combat: { hp: 45, damage: 16, attackRange: 9, attackCooldown: 1.0, windupTime: 0.4, healthBarYOffset: 2.1 },
+      // Balance pass: was the weakest special-tier unit in the game for its cost; raised hp/damage.
+      combat: { hp: 60, damage: 18, attackRange: 9, attackCooldown: 1.0, windupTime: 0.4, healthBarYOffset: 2.1 },
     },
     'void-arbiter': {
       id: 'void-arbiter',
@@ -263,7 +275,8 @@ export const UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       visionRadius: 13,
       color: 0x9b5de5,
       // Kinetic Crush: re-tuned up from the old "support/air" numbers now that this is the faction's heavy-tier unit.
-      combat: { hp: 90, damage: 22, attackRange: 8, attackCooldown: 0.9, windupTime: 0.3, healthBarYOffset: 2.4 },
+      // Balance pass: still underweight vs. other heavy units at this cost; raised hp/damage further.
+      combat: { hp: 160, damage: 26, attackRange: 8, attackCooldown: 0.9, windupTime: 0.3, healthBarYOffset: 2.4 },
     },
     // --- Convergence (Ascension) outputs ---
     'ascended-zealot': {
@@ -278,7 +291,8 @@ export const UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       selectionRadius: 0.85,
       visionRadius: 12,
       color: 0xf4c542,
-      combat: { hp: 55, damage: 16, attackRange: 11.25, attackCooldown: 1.0, windupTime: 0.4, healthBarYOffset: 2.3 },
+      // Balance pass: was the weakest 3x-basic fusion output in the game for its investment; raised hp/damage.
+      combat: { hp: 100, damage: 28, attackRange: 11.25, attackCooldown: 1.0, windupTime: 0.4, healthBarYOffset: 2.3 },
     },
     'eclipse-titan': {
       id: 'eclipse-titan',
@@ -384,6 +398,181 @@ export const UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       visionRadius: 10,
       color: 0x4fd8e0,
       combat: { hp: 380, damage: 36, attackRange: 9, attackCooldown: 1.6, windupTime: 0.6, healthBarYOffset: 3.3 },
+    },
+  },
+
+  'verdant-wilds': {
+    'root-tender': {
+      id: 'root-tender',
+      name: 'Root Tender',
+      role: 'economy',
+      costCoreEnergy: 22,
+      costFactionResource: 0,
+      supply: 1,
+      buildTimeSec: 7.5,
+      moveSpeed: 5.5,
+      selectionRadius: 0.85,
+      visionRadius: 8,
+      color: 0x6b9b4f,
+    },
+    'thorn-skitterling': {
+      id: 'thorn-skitterling',
+      name: 'Thorn Skitterling',
+      role: 'basic infantry',
+      costCoreEnergy: 20,
+      costFactionResource: 15,
+      supply: 1,
+      buildTimeSec: 7,
+      moveSpeed: 7.5,
+      selectionRadius: 0.65,
+      visionRadius: 8,
+      color: 0x6b9b4f,
+      combat: { hp: 32, damage: 5, attackRange: 1.4, attackCooldown: 0.7, windupTime: 0.25, healthBarYOffset: 1.6 },
+    },
+    'spore-mystic': {
+      id: 'spore-mystic',
+      name: 'Spore Mystic',
+      role: 'special support - toxic spores',
+      costCoreEnergy: 55,
+      costFactionResource: 30,
+      supply: 2,
+      buildTimeSec: 15,
+      moveSpeed: 5,
+      selectionRadius: 0.75,
+      visionRadius: 9,
+      color: 0x8fd45f,
+      combat: { hp: 60, damage: 14, attackRange: 8, attackCooldown: 1.1, windupTime: 0.4, healthBarYOffset: 2.0 },
+    },
+    'bramble-colossus': {
+      id: 'bramble-colossus',
+      name: 'Bramble Colossus',
+      role: 'heavy infantry - thorn beast',
+      costCoreEnergy: 110,
+      costFactionResource: 70,
+      supply: 3,
+      buildTimeSec: 24,
+      moveSpeed: 3.5,
+      selectionRadius: 1.15,
+      visionRadius: 8,
+      color: 0x355e28,
+      // Whirling thorn swipe hits two targets at once.
+      combat: { hp: 190, damage: 14, attackRange: 1.9, attackCooldown: 0.9, windupTime: 0.4, healthBarYOffset: 2.8, multiTargetCount: 2 },
+    },
+    // --- Convergence (Symbiosis) outputs ---
+    'bramblehive-matron': {
+      id: 'bramblehive-matron',
+      name: 'Bramblehive Matron',
+      role: 'converged / swarm queen',
+      costCoreEnergy: 0,
+      costFactionResource: 0,
+      supply: 3,
+      buildTimeSec: 0,
+      moveSpeed: 4.5,
+      selectionRadius: 1.2,
+      visionRadius: 9,
+      color: 0x6b9b4f,
+      combat: { hp: 180, damage: 10, attackRange: 1.9, attackCooldown: 0.9, windupTime: 0.4, healthBarYOffset: 2.5, multiTargetCount: 2 },
+    },
+    'verdant-devourer': {
+      id: 'verdant-devourer',
+      name: 'Verdant Devourer',
+      role: 'converged / apex predator',
+      costCoreEnergy: 0,
+      costFactionResource: 0,
+      supply: 7,
+      buildTimeSec: 0,
+      moveSpeed: 3.5,
+      selectionRadius: 1.6,
+      visionRadius: 9,
+      color: 0x2d5a20,
+      combat: { hp: 380, damage: 30, attackRange: 5, attackCooldown: 1.1, windupTime: 0.5, healthBarYOffset: 3.2, multiTargetCount: 2 },
+    },
+  },
+
+  'umbral-voidkin': {
+    'husk-drifter': {
+      id: 'husk-drifter',
+      name: 'Husk Drifter',
+      role: 'economy',
+      costCoreEnergy: 25,
+      costFactionResource: 0,
+      supply: 1,
+      buildTimeSec: 8,
+      moveSpeed: 5.5,
+      selectionRadius: 0.85,
+      visionRadius: 9,
+      color: 0x7a3fb0,
+    },
+    'shade-stalker': {
+      id: 'shade-stalker',
+      name: 'Shade Stalker',
+      role: 'basic infantry',
+      costCoreEnergy: 18,
+      costFactionResource: 17,
+      supply: 1,
+      buildTimeSec: 7,
+      moveSpeed: 8,
+      selectionRadius: 0.65,
+      visionRadius: 9,
+      color: 0x7a3fb0,
+      combat: { hp: 26, damage: 5, attackRange: 1.3, attackCooldown: 0.7, windupTime: 0.2, healthBarYOffset: 1.5 },
+    },
+    nullweaver: {
+      id: 'nullweaver',
+      name: 'Nullweaver',
+      role: 'special support - void magic',
+      costCoreEnergy: 50,
+      costFactionResource: 35,
+      supply: 2,
+      buildTimeSec: 15,
+      moveSpeed: 5,
+      selectionRadius: 0.75,
+      visionRadius: 10,
+      color: 0x9f6fd0,
+      combat: { hp: 55, damage: 15, attackRange: 9, attackCooldown: 1.0, windupTime: 0.4, healthBarYOffset: 2.0 },
+    },
+    'voidmaw-horror': {
+      id: 'voidmaw-horror',
+      name: 'Voidmaw Horror',
+      role: 'heavy infantry - void beast',
+      costCoreEnergy: 100,
+      costFactionResource: 90,
+      supply: 3,
+      buildTimeSec: 24,
+      moveSpeed: 4,
+      selectionRadius: 1.1,
+      visionRadius: 9,
+      color: 0x3a1a5a,
+      combat: { hp: 180, damage: 30, attackRange: 6, attackCooldown: 1.3, windupTime: 0.5, healthBarYOffset: 2.7 },
+    },
+    // --- Convergence (Assimilation) outputs ---
+    'shade-legion': {
+      id: 'shade-legion',
+      name: 'Shade Legion',
+      role: 'converged / assassin swarm',
+      costCoreEnergy: 0,
+      costFactionResource: 0,
+      supply: 3,
+      buildTimeSec: 0,
+      moveSpeed: 6.5,
+      selectionRadius: 1.1,
+      visionRadius: 10,
+      color: 0x7a3fb0,
+      combat: { hp: 160, damage: 16, attackRange: 1.4, attackCooldown: 0.7, windupTime: 0.25, healthBarYOffset: 2.4 },
+    },
+    'oblivion-warden': {
+      id: 'oblivion-warden',
+      name: 'Oblivion Warden',
+      role: 'converged / void titan',
+      costCoreEnergy: 0,
+      costFactionResource: 0,
+      supply: 7,
+      buildTimeSec: 0,
+      moveSpeed: 4,
+      selectionRadius: 1.5,
+      visionRadius: 11,
+      color: 0x2d0f4a,
+      combat: { hp: 380, damage: 50, attackRange: 9, attackCooldown: 1.3, windupTime: 0.5, healthBarYOffset: 3.3 },
     },
   },
 };
