@@ -46,7 +46,7 @@ working, testable increment. See commit history for progress.
 - [x] Milestone 3 — Cyber-Nexus economy loop (harvester, resources, HUD)
 - [x] Milestone 4 — Selection, pathfinding, basic combat
 - [x] Milestone 5 — Production queues
-- [ ] Milestone 6 — Convergence (fusion) system
+- [x] Milestone 6 — Convergence (fusion) system
 - [ ] Milestone 7 — Fog of war + basic AI opponent
 - [ ] Milestone 8 — Sun Proximity system + win/lose flow
 - [ ] Milestone 9 — Extend to Pyroliths, Solari Archons, Frost-Forged
