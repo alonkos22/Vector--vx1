@@ -43,9 +43,10 @@ export interface HUDState {
 
 function styleButton(button: HTMLButtonElement): void {
   button.style.cssText = `
-    font: inherit; font-size: 12px; color: #dff3ff; text-align: left;
+    font: inherit; font-size: 13px; color: #dff3ff; text-align: left;
     background: rgba(46,163,255,0.15); border: 1px solid #2ea3ff88;
-    border-radius: 4px; padding: 6px 9px; cursor: pointer;
+    border-radius: 4px; padding: 11px 12px; cursor: pointer;
+    min-height: 40px; touch-action: manipulation;
   `;
   button.addEventListener('mouseenter', () => {
     if (!button.disabled) button.style.background = 'rgba(46,163,255,0.32)';
@@ -124,8 +125,8 @@ export class HUD {
       position: absolute; bottom: 52px; left: 12px;
       font-size: 13px; color: #0b0d10; font-weight: 700; text-align: left;
       background: linear-gradient(135deg, #9fe8ff, #4fc3ff); border: 1px solid #dff3ff;
-      border-radius: 6px; padding: 8px 14px; cursor: pointer; display: none;
-      box-shadow: 0 0 14px #4fc3ffaa;
+      border-radius: 6px; padding: 12px 14px; cursor: pointer; display: none;
+      box-shadow: 0 0 14px #4fc3ffaa; touch-action: manipulation; min-height: 40px;
     `;
     container.appendChild(this.convergeButton);
 

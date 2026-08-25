@@ -20,9 +20,17 @@ function buildFluxHarvester(): THREE.Object3D {
     metalness: 0.6,
     roughness: 0.35,
   });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 0.8, 4, 8), material);
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 0.8, 6, 12), material);
   body.position.y = 0.9;
   group.add(body);
+  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), eyeMaterial);
+  eye.position.set(0, 1.05, 0.42);
+  group.add(eye);
+  const collector = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.05, 6, 14), material);
+  collector.position.y = 0.35;
+  collector.rotation.x = Math.PI / 2;
+  group.add(collector);
   return withShadows(group);
 }
 
@@ -175,13 +183,19 @@ function buildCinderGrub(): THREE.Object3D {
     roughness: 0.9,
     metalness: 0.05,
   });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), material);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), material);
   body.scale.set(1.3, 0.7, 1);
   body.position.y = 0.55;
   group.add(body);
   const bump = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), material);
   bump.position.set(0.5, 0.7, 0);
   group.add(bump);
+  const legGeo = new THREE.SphereGeometry(0.14, 6, 6);
+  for (const side of [-1, 1] as const) {
+    const leg = new THREE.Mesh(legGeo, material);
+    leg.position.set(side * 0.35, 0.25, 0.35);
+    group.add(leg);
+  }
   return withShadows(group);
 }
 
@@ -194,12 +208,19 @@ function buildEmberWhelp(): THREE.Object3D {
     roughness: 0.85,
     metalness: 0.05,
   });
-  const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 0), material);
+  const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), material);
   body.position.y = 0.9;
   group.add(body);
-  const spike = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.5, 5), material);
+  const spike = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.5, 6), material);
   spike.position.y = 1.5;
   group.add(spike);
+  const finGeo = new THREE.ConeGeometry(0.1, 0.3, 5);
+  for (const side of [-1, 1] as const) {
+    const fin = new THREE.Mesh(finGeo, material);
+    fin.position.set(side * 0.4, 0.75, -0.2);
+    fin.rotation.z = side * 0.7;
+    group.add(fin);
+  }
   return withShadows(group);
 }
 
@@ -219,6 +240,12 @@ function buildCinderHurler(): THREE.Object3D {
   arm.position.set(0.5, 1.5, 0);
   arm.rotation.z = Math.PI / 3;
   group.add(arm);
+  const legGeo = new THREE.CylinderGeometry(0.09, 0.12, 0.85, 6);
+  for (const side of [-1, 1] as const) {
+    const leg = new THREE.Mesh(legGeo, material);
+    leg.position.set(side * 0.3, 0.6, 0);
+    group.add(leg);
+  }
   return withShadows(group);
 }
 
@@ -291,13 +318,20 @@ function buildLumenWisp(): THREE.Object3D {
     transparent: true,
     opacity: 0.9,
   });
-  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 10), material);
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.35, 14, 12), material);
   orb.position.y = 1.4;
   group.add(orb);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.025, 6, 16), material);
   ring.position.y = 1.4;
   ring.rotation.x = Math.PI / 2.3;
   group.add(ring);
+  const trailGeo = new THREE.SphereGeometry(0.13, 8, 8);
+  for (let i = 0; i < 2; i++) {
+    const trail = new THREE.Mesh(trailGeo, material);
+    trail.scale.setScalar(1 - i * 0.35);
+    trail.position.set(0, 1.4 - i * 0.15, -0.35 - i * 0.25);
+    group.add(trail);
+  }
   return withShadows(group);
 }
 
@@ -312,12 +346,18 @@ function buildSolarAcolyte(): THREE.Object3D {
     transparent: true,
     opacity: 0.92,
   });
-  const robe = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.3, 10), material);
+  const robe = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.3, 12), material);
   robe.position.y = 1.1;
   group.add(robe);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), material);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), material);
   head.position.y = 1.9;
   group.add(head);
+  const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.5, 6), material);
+  staff.position.set(0.45, 1.1, 0);
+  group.add(staff);
+  const staffTip = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), material);
+  staffTip.position.set(0.45, 1.85, 0);
+  group.add(staffTip);
   return withShadows(group);
 }
 
@@ -426,6 +466,9 @@ function buildFrostTrooper(): THREE.Object3D {
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.4, 1.1, 8), material);
   torso.position.y = 1.0;
   group.add(torso);
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), material);
+  helmet.position.y = 1.75;
+  group.add(helmet);
   const rifle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 6), material);
   rifle.position.set(0.4, 1.1, 0.2);
   rifle.rotation.z = Math.PI / 2;
@@ -474,6 +517,16 @@ function buildIceHowitzer(): THREE.Object3D {
   barrel.position.set(0, 0.9, 0.5);
   barrel.rotation.x = Math.PI / 2.6;
   group.add(barrel);
+  const wheelGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.18, 10);
+  for (const [x, z] of [
+    [-0.45, -0.3],
+    [0.45, -0.3],
+  ] as const) {
+    const wheel = new THREE.Mesh(wheelGeo, material);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x, 0.25, z);
+    group.add(wheel);
+  }
   return withShadows(group);
 }
 

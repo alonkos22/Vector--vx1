@@ -13,18 +13,29 @@ export class SelectionManager {
   private readonly camera: THREE.Camera;
   private readonly getUnits: () => Unit[];
   private readonly onChange: () => void;
+  /** Touch-only: given a tap's screen point, may issue a move/attack order and return true to suppress the default tap-to-select. Lets the caller (which knows about enemy targets) implement "smart tap" since touch has no separate right-click. */
+  private readonly onTouchTap?: (clientX: number, clientY: number) => boolean;
   private readonly boxEl: HTMLDivElement;
   private readonly controlGroups = new Map<number, Unit[]>();
 
   private dragStartPx: { x: number; y: number } | null = null;
+  private dragPointerId: number | null = null;
   private dragging = false;
   private lastClick: { time: number; x: number; y: number } | null = null;
+  private readonly activeTouchIds = new Set<number>();
 
-  constructor(renderer: THREE.WebGLRenderer, camera: THREE.Camera, getUnits: () => Unit[], onChange: () => void) {
+  constructor(
+    renderer: THREE.WebGLRenderer,
+    camera: THREE.Camera,
+    getUnits: () => Unit[],
+    onChange: () => void,
+    onTouchTap?: (clientX: number, clientY: number) => boolean,
+  ) {
     this.renderer = renderer;
     this.camera = camera;
     this.getUnits = getUnits;
     this.onChange = onChange;
+    this.onTouchTap = onTouchTap;
 
     this.boxEl = document.createElement('div');
     this.boxEl.style.cssText = `
@@ -33,21 +44,33 @@ export class SelectionManager {
     `;
     document.body.appendChild(this.boxEl);
 
+    // Pointer Events unify mouse and single-finger touch: click-select, drag-box-select and
+    // double-click/tap all work the same way for both. A second finger joining mid-drag hands
+    // off to RTSCamera's two-finger pan/pinch-zoom instead (see abandonDrag below).
     const el = renderer.domElement;
-    el.addEventListener('mousedown', (e) => this.onMouseDown(e));
-    window.addEventListener('mousemove', (e) => this.onMouseMove(e));
-    window.addEventListener('mouseup', (e) => this.onMouseUp(e));
+    el.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+    window.addEventListener('pointermove', (e) => this.onPointerMove(e));
+    window.addEventListener('pointerup', (e) => this.onPointerUp(e));
+    window.addEventListener('pointercancel', (e) => this.onPointerCancel(e));
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
   }
 
-  private onMouseDown(e: MouseEvent): void {
+  private onPointerDown(e: PointerEvent): void {
+    if (e.pointerType === 'touch') {
+      this.activeTouchIds.add(e.pointerId);
+      if (this.activeTouchIds.size > 1) {
+        this.abandonDrag();
+        return;
+      }
+    }
     if (e.button !== 0) return;
     this.dragStartPx = { x: e.clientX, y: e.clientY };
+    this.dragPointerId = e.pointerId;
     this.dragging = false;
   }
 
-  private onMouseMove(e: MouseEvent): void {
-    if (!this.dragStartPx) return;
+  private onPointerMove(e: PointerEvent): void {
+    if (!this.dragStartPx || e.pointerId !== this.dragPointerId) return;
     const dx = e.clientX - this.dragStartPx.x;
     const dy = e.clientY - this.dragStartPx.y;
     if (!this.dragging && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) this.dragging = true;
@@ -62,21 +85,36 @@ export class SelectionManager {
     this.boxEl.style.display = 'block';
   }
 
-  private onMouseUp(e: MouseEvent): void {
-    if (e.button !== 0 || !this.dragStartPx) return;
+  private onPointerUp(e: PointerEvent): void {
+    if (e.pointerType === 'touch') this.activeTouchIds.delete(e.pointerId);
+    if (e.button !== 0 || !this.dragStartPx || e.pointerId !== this.dragPointerId) return;
 
     if (this.dragging) {
       this.finishBoxSelect(this.dragStartPx, { x: e.clientX, y: e.clientY }, e.shiftKey);
-    } else {
+    } else if (!(e.pointerType === 'touch' && this.onTouchTap?.(e.clientX, e.clientY))) {
       this.handleClickSelect(e);
     }
 
     this.dragStartPx = null;
+    this.dragPointerId = null;
     this.dragging = false;
     this.boxEl.style.display = 'none';
   }
 
-  private handleClickSelect(e: MouseEvent): void {
+  private onPointerCancel(e: PointerEvent): void {
+    if (e.pointerType === 'touch') this.activeTouchIds.delete(e.pointerId);
+    if (e.pointerId === this.dragPointerId) this.abandonDrag();
+  }
+
+  /** Cancels an in-progress drag without issuing a select — used when a second finger joins (handing off to camera gestures) or a touch is cancelled by the OS. */
+  private abandonDrag(): void {
+    this.dragStartPx = null;
+    this.dragPointerId = null;
+    this.dragging = false;
+    this.boxEl.style.display = 'none';
+  }
+
+  private handleClickSelect(e: PointerEvent): void {
     const now = performance.now();
     const isDoubleClick =
       this.lastClick !== null &&
@@ -105,6 +143,11 @@ export class SelectionManager {
       this.select(hit);
     }
     this.onChange();
+  }
+
+  /** Whether one of the player's own units is at this screen point — lets a touch "smart tap" fall back to normal select instead of issuing a move order onto a friendly unit. */
+  hasUnitAt(clientX: number, clientY: number): boolean {
+    return this.pickUnitAt(clientX, clientY) !== null;
   }
 
   private pickUnitAt(clientX: number, clientY: number): Unit | null {

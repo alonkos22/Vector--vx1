@@ -55,6 +55,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -332,6 +333,7 @@ const selection = new SelectionManager(
   rtsCamera.camera,
   () => [...playerBase.harvesters, ...playerBase.combatUnits] as Unit[],
   updateSelectionHUD,
+  handleTouchTap,
 );
 
 function pickTargetAt(clientX: number, clientY: number): Targetable | null {
@@ -377,6 +379,16 @@ function issueOrderAt(clientX: number, clientY: number): void {
         : new THREE.Vector3();
     unit.moveTo(point.clone().add(offset));
   });
+}
+
+/** Touch has no right-click, so a tap does double duty: select on a friendly unit, otherwise move/attack (issueOrderAt) — but only when something is already selected, so an empty-handed tap still just (de)selects normally. */
+function handleTouchTap(clientX: number, clientY: number): boolean {
+  if (placementTarget) return false;
+  const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
+  if (selectedCombat.length === 0 || selection.hasUnitAt(clientX, clientY)) return false;
+
+  issueOrderAt(clientX, clientY);
+  return true;
 }
 
 renderer.domElement.addEventListener('mouseup', (e) => {

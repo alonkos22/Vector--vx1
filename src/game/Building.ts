@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import type { BuildingConfig } from '../config/buildings';
+import { BUILDING_ROLE_BY_ID, type BuildingConfig } from '../config/buildings';
 import type { Targetable } from './Targetable';
 import { HealthBar } from './HealthBar';
+import { buildBuildingVisual, BUILDING_TOP_HEIGHT_FACTOR } from './buildingVisuals';
 
 const MAX_QUEUE_SIZE = 5;
 
@@ -15,12 +16,13 @@ interface QueuedItem {
 export class Building implements Targetable {
   readonly config: BuildingConfig;
   readonly ownerId: string;
-  readonly mesh: THREE.Mesh;
+  readonly mesh: THREE.Group;
   readonly position: THREE.Vector3;
   isComplete: boolean;
   maxHp: number;
   hp: number;
 
+  private readonly material: THREE.MeshStandardMaterial;
   private readonly healthBar: HealthBar;
   private constructionRemaining: number;
   private readonly productionQueue: QueuedItem[] = [];
@@ -32,25 +34,19 @@ export class Building implements Targetable {
     this.maxHp = config.maxHp;
     this.hp = config.maxHp;
 
-    const geometry = new THREE.CylinderGeometry(config.footprint, config.footprint * 1.15, config.footprint * 1.6, 6);
-    const material = new THREE.MeshStandardMaterial({
-      color: config.color,
-      emissive: config.color,
-      emissiveIntensity: prebuilt ? 0.35 : 0.1,
-      roughness: 0.4,
-      metalness: 0.6,
-      transparent: !prebuilt,
-      opacity: prebuilt ? 1 : 0.4,
-    });
-    this.mesh = new THREE.Mesh(geometry, material);
+    const role = BUILDING_ROLE_BY_ID[config.id];
+    const { group, material } = buildBuildingVisual(role, config.footprint, config.color);
+    this.material = material;
+    this.material.emissiveIntensity = prebuilt ? 0.35 : 0.1;
+    this.material.transparent = !prebuilt;
+    this.material.opacity = prebuilt ? 1 : 0.4;
+
+    this.mesh = group;
     this.mesh.position.copy(this.position);
-    this.mesh.position.y = config.footprint * 0.8;
-    this.mesh.castShadow = true;
-    this.mesh.receiveShadow = true;
     this.mesh.scale.setScalar(prebuilt ? 1 : 0.5);
     this.mesh.userData.buildingRef = this;
 
-    this.healthBar = new HealthBar(config.footprint * 1.6 + 0.6, 1.6);
+    this.healthBar = new HealthBar(config.footprint * BUILDING_TOP_HEIGHT_FACTOR[role] + 0.6, 1.6);
     this.mesh.add(this.healthBar.group);
     this.healthBar.update(1);
 
@@ -74,15 +70,14 @@ export class Building implements Targetable {
     if (!this.isComplete) {
       this.constructionRemaining -= dt;
       const progress = 1 - Math.max(this.constructionRemaining, 0) / this.config.buildTimeSec;
-      const material = this.mesh.material as THREE.MeshStandardMaterial;
-      material.opacity = 0.4 + progress * 0.6;
+      this.material.opacity = 0.4 + progress * 0.6;
       this.mesh.scale.setScalar(0.5 + progress * 0.5);
 
       if (this.constructionRemaining <= 0) {
         this.isComplete = true;
-        material.opacity = 1;
-        material.transparent = false;
-        material.emissiveIntensity = 0.35;
+        this.material.opacity = 1;
+        this.material.transparent = false;
+        this.material.emissiveIntensity = 0.35;
         this.mesh.scale.setScalar(1);
       }
       return;

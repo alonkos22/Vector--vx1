@@ -256,3 +256,8 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
 export const CYBER_NEXUS_BUILDINGS: Record<string, BuildingConfig> = Object.fromEntries(
   BUILDING_ROLES.map((role) => [BUILDINGS_BY_FACTION['cyber-nexus'][role].id, BUILDINGS_BY_FACTION['cyber-nexus'][role]]),
 );
+
+/** Building id -> canonical role, for picking a building's procedural visual archetype (buildingVisuals.ts) from any faction's config. */
+export const BUILDING_ROLE_BY_ID: Record<string, BuildingRole> = Object.fromEntries(
+  Object.values(BUILDINGS_BY_FACTION).flatMap((byRole) => BUILDING_ROLES.map((role) => [byRole[role].id, role] as const)),
+);

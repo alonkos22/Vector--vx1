@@ -16,6 +16,10 @@ export interface RTSCameraOptions {
   zoomSpeed: number;
   rotateSpeed: number;
   mapHalfExtent: number;
+  /** World units of pan per screen pixel of two-finger drag, at startDistance zoom. */
+  touchPanSpeed: number;
+  /** Distance-factor change per pixel of pinch spread/pinch. */
+  pinchZoomSpeed: number;
 }
 
 const DEFAULT_OPTIONS: RTSCameraOptions = {
@@ -30,6 +34,8 @@ const DEFAULT_OPTIONS: RTSCameraOptions = {
   zoomSpeed: 0.06,
   rotateSpeed: 1.4,
   mapHalfExtent: 200,
+  touchPanSpeed: 0.045,
+  pinchZoomSpeed: 0.004,
 };
 
 /**
@@ -86,8 +92,11 @@ export class RTSCamera {
   }
 
   private handleZoom(input: InputManager): void {
-    if (input.wheelDelta === 0) return;
-    const factor = 1 + input.wheelDelta * this.opts.zoomSpeed * 0.01;
+    let factor = 1;
+    if (input.wheelDelta !== 0) factor *= 1 + input.wheelDelta * this.opts.zoomSpeed * 0.01;
+    // Pinch-out (fingers spreading, positive delta) zooms in, so it subtracts from distance.
+    if (input.touchPinchDelta !== 0) factor *= 1 - input.touchPinchDelta * this.opts.pinchZoomSpeed;
+    if (factor === 1) return;
     this.distance = THREE.MathUtils.clamp(this.distance * factor, this.opts.minDistance, this.opts.maxDistance);
   }
 
@@ -118,18 +127,26 @@ export class RTSCamera {
       else if (my >= viewportHeight - margin) panZ += 1;
     }
 
-    if (panX === 0 && panZ === 0) return;
-
-    const panVec = new THREE.Vector2(panX, panZ);
-    if (panVec.lengthSq() > 1) panVec.normalize();
-
     // Pan relative to current camera azimuth so "forward" is always screen-up.
     const forward = new THREE.Vector3(Math.sin(this.azimuth), 0, Math.cos(this.azimuth));
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
+    const zoomScale = this.distance / this.opts.startDistance;
 
-    const speed = this.opts.panSpeed * (this.distance / this.opts.startDistance) * dt;
-    this.target.addScaledVector(forward, -panVec.y * speed);
-    this.target.addScaledVector(right, panVec.x * speed);
+    if (panX !== 0 || panZ !== 0) {
+      const panVec = new THREE.Vector2(panX, panZ);
+      if (panVec.lengthSq() > 1) panVec.normalize();
+      const speed = this.opts.panSpeed * zoomScale * dt;
+      this.target.addScaledVector(forward, -panVec.y * speed);
+      this.target.addScaledVector(right, panVec.x * speed);
+    }
+
+    // Two-finger touch drag: the ground stays "stuck" to the fingers (grab-to-pan), the
+    // opposite convention from WASD's move-the-camera-this-way above.
+    if (input.touchPan.dx !== 0 || input.touchPan.dy !== 0) {
+      const touchScale = this.opts.touchPanSpeed * zoomScale;
+      this.target.addScaledVector(forward, input.touchPan.dy * touchScale);
+      this.target.addScaledVector(right, -input.touchPan.dx * touchScale);
+    }
 
     const half = this.opts.mapHalfExtent;
     this.target.x = THREE.MathUtils.clamp(this.target.x, -half, half);
