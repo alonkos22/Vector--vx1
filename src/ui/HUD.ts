@@ -1,28 +1,51 @@
+export interface HUDUnitDef {
+  unitId: string;
+  name: string;
+  costLabel: string;
+}
+
+export interface HUDPanelDef {
+  buildingId: string;
+  buildingName: string;
+  /** Prebuilt buildings (Core Spire) never show a "Build" button — they exist from the start. */
+  prebuilt: boolean;
+  buildCostLabel: string;
+  units: HUDUnitDef[];
+}
+
 export interface HUDCallbacks {
-  onTrainHarvester: () => void;
-  onBeginPlaceFluxSiphon: () => void;
+  onBeginPlaceBuilding: (buildingId: string) => void;
+  onQueueUnit: (buildingId: string, unitId: string) => void;
+}
+
+export interface HUDPanelState {
+  buildingId: string;
+  built: boolean;
+  placementActive: boolean;
+  /** Construction progress 0..1, or null when not currently under construction. */
+  constructionProgress: number | null;
+  canAffordBuilding: boolean;
+  queueLength: number;
+  /** Progress 0..1 of the item at the head of the queue, or null when idle. */
+  queueProgress: number | null;
+  queueFull: boolean;
+  unitAffordability: Record<string, boolean>;
 }
 
 export interface HUDState {
   coreEnergy: number;
   factionResource: number;
   factionResourceLabel: string;
-  harvesterCount: number;
+  unitCount: number;
   supplyUsed: number;
-  coreSpireProducing: boolean;
-  coreSpireProgress: number | null;
-  fluxSiphonBuilt: boolean;
-  fluxSiphonProgress: number | null;
-  canAffordHarvester: boolean;
-  canAffordFluxSiphon: boolean;
-  placementModeActive: boolean;
+  panels: HUDPanelState[];
 }
 
 function styleButton(button: HTMLButtonElement): void {
   button.style.cssText = `
-    font: inherit; font-size: 13px; color: #dff3ff; text-align: left;
+    font: inherit; font-size: 12px; color: #dff3ff; text-align: left;
     background: rgba(46,163,255,0.15); border: 1px solid #2ea3ff88;
-    border-radius: 4px; padding: 8px 10px; cursor: pointer;
+    border-radius: 4px; padding: 6px 9px; cursor: pointer;
   `;
   button.addEventListener('mouseenter', () => {
     if (!button.disabled) button.style.background = 'rgba(46,163,255,0.32)';
@@ -32,17 +55,23 @@ function styleButton(button: HTMLButtonElement): void {
   });
 }
 
-/** Minimal DOM-based HUD: resource counters + economy action buttons. */
+interface PanelElements {
+  container: HTMLDivElement;
+  buildButton: HTMLButtonElement | null;
+  queueLabel: HTMLDivElement;
+  unitButtons: Map<string, HTMLButtonElement>;
+}
+
+/** DOM-based HUD: resource counters + one panel per production building, built once and updated per-frame. */
 export class HUD {
   private readonly coreEnergyEl: HTMLSpanElement;
   private readonly factionResourceEl: HTMLSpanElement;
   private readonly supplyEl: HTMLSpanElement;
-  private readonly trainButton: HTMLButtonElement;
-  private readonly siphonButton: HTMLButtonElement;
   private readonly statusEl: HTMLDivElement;
   private readonly selectionEl: HTMLDivElement;
+  private readonly panels = new Map<string, PanelElements>();
 
-  constructor(container: HTMLElement, callbacks: HUDCallbacks) {
+  constructor(container: HTMLElement, panelDefs: HUDPanelDef[], callbacks: HUDCallbacks) {
     const root = document.createElement('div');
     root.style.cssText = `
       position: absolute; top: 12px; left: 12px; right: 12px;
@@ -64,28 +93,19 @@ export class HUD {
     resourceBar.append(this.coreEnergyEl, this.factionResourceEl, this.supplyEl);
     root.appendChild(resourceBar);
 
-    const actionBar = document.createElement('div');
-    actionBar.style.cssText = `
-      background: rgba(10,16,24,0.75); border: 1px solid #2ea3ff55;
-      border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 6px;
-      pointer-events: auto; min-width: 240px;
-    `;
+    const panelsBar = document.createElement('div');
+    panelsBar.style.cssText = 'display: flex; flex-direction: column; gap: 8px; align-items: flex-end;';
 
-    this.trainButton = document.createElement('button');
-    styleButton(this.trainButton);
-    this.trainButton.addEventListener('click', callbacks.onTrainHarvester);
-    actionBar.appendChild(this.trainButton);
-
-    this.siphonButton = document.createElement('button');
-    styleButton(this.siphonButton);
-    this.siphonButton.addEventListener('click', callbacks.onBeginPlaceFluxSiphon);
-    actionBar.appendChild(this.siphonButton);
+    for (const def of panelDefs) {
+      panelsBar.appendChild(this.buildPanel(def, callbacks));
+    }
 
     this.statusEl = document.createElement('div');
-    this.statusEl.style.cssText = 'font-size: 12px; color: #9fd8ff; min-height: 16px;';
-    actionBar.appendChild(this.statusEl);
+    this.statusEl.style.cssText =
+      'font-size: 12px; color: #9fd8ff; background: rgba(10,16,24,0.75); border-radius: 4px; padding: 4px 8px; min-height: 14px;';
+    panelsBar.appendChild(this.statusEl);
 
-    root.appendChild(actionBar);
+    root.appendChild(panelsBar);
     container.appendChild(root);
 
     this.selectionEl = document.createElement('div');
@@ -109,36 +129,88 @@ export class HUD {
     container.appendChild(hintEl);
   }
 
+  private buildPanel(def: HUDPanelDef, callbacks: HUDCallbacks): HTMLDivElement {
+    const panel = document.createElement('div');
+    panel.style.cssText = `
+      background: rgba(10,16,24,0.75); border: 1px solid #2ea3ff55;
+      border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 5px;
+      pointer-events: auto; min-width: 240px;
+    `;
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size: 12px; font-weight: 600; color: #9fd8ff;';
+    title.textContent = def.buildingName;
+    panel.appendChild(title);
+
+    let buildButton: HTMLButtonElement | null = null;
+    if (!def.prebuilt) {
+      buildButton = document.createElement('button');
+      styleButton(buildButton);
+      buildButton.textContent = `Build ${def.buildingName} (${def.buildCostLabel})`;
+      buildButton.addEventListener('click', () => callbacks.onBeginPlaceBuilding(def.buildingId));
+      panel.appendChild(buildButton);
+    }
+
+    const unitButtons = new Map<string, HTMLButtonElement>();
+    for (const unit of def.units) {
+      const btn = document.createElement('button');
+      styleButton(btn);
+      btn.textContent = `Train ${unit.name} (${unit.costLabel})`;
+      btn.style.display = 'none';
+      btn.addEventListener('click', () => callbacks.onQueueUnit(def.buildingId, unit.unitId));
+      panel.appendChild(btn);
+      unitButtons.set(unit.unitId, btn);
+    }
+
+    const queueLabel = document.createElement('div');
+    queueLabel.style.cssText = 'font-size: 11px; color: #9fd8ffcc;';
+    panel.appendChild(queueLabel);
+
+    this.panels.set(def.buildingId, { container: panel, buildButton, queueLabel, unitButtons });
+    return panel;
+  }
+
   update(state: HUDState): void {
     this.coreEnergyEl.textContent = `⚡ Core Energy: ${Math.floor(state.coreEnergy)}`;
     this.factionResourceEl.textContent = `◆ ${state.factionResourceLabel}: ${Math.floor(state.factionResource)}`;
-    this.supplyEl.textContent = `Supply: ${state.supplyUsed} (${state.harvesterCount} harvesters)`;
+    this.supplyEl.textContent = `Supply: ${state.supplyUsed} (${state.unitCount} units)`;
 
-    if (state.coreSpireProducing && state.coreSpireProgress !== null) {
-      this.trainButton.textContent = `Training Flux Harvester… ${Math.floor(state.coreSpireProgress * 100)}%`;
-      this.trainButton.disabled = true;
-    } else {
-      this.trainButton.textContent = 'Train Flux Harvester (30⚡ · 9s)';
-      this.trainButton.disabled = !state.canAffordHarvester;
-    }
+    for (const panelState of state.panels) {
+      const els = this.panels.get(panelState.buildingId);
+      if (!els) continue;
 
-    if (state.fluxSiphonBuilt) {
-      this.siphonButton.textContent = 'Flux Siphon built';
-      this.siphonButton.disabled = true;
-    } else if (state.fluxSiphonProgress !== null) {
-      this.siphonButton.textContent = `Building Flux Siphon… ${Math.floor(state.fluxSiphonProgress * 100)}%`;
-      this.siphonButton.disabled = true;
-    } else if (state.placementModeActive) {
-      this.siphonButton.textContent = 'Click the ground to place (Esc to cancel)';
-      this.siphonButton.disabled = false;
-    } else {
-      this.siphonButton.textContent = 'Build Flux Siphon (50⚡ · 25s)';
-      this.siphonButton.disabled = !state.canAffordFluxSiphon;
-    }
+      if (els.buildButton) {
+        if (panelState.built) {
+          els.buildButton.style.display = 'none';
+        } else {
+          els.buildButton.style.display = 'block';
+          if (panelState.constructionProgress !== null) {
+            els.buildButton.textContent = `Building… ${Math.floor(panelState.constructionProgress * 100)}%`;
+            els.buildButton.disabled = true;
+          } else if (panelState.placementActive) {
+            els.buildButton.textContent = 'Click the ground to place (Esc to cancel)';
+            els.buildButton.disabled = false;
+          } else {
+            els.buildButton.disabled = !panelState.canAffordBuilding;
+          }
+        }
+      }
 
-    for (const btn of [this.trainButton, this.siphonButton]) {
-      btn.style.opacity = btn.disabled ? '0.5' : '1';
-      btn.style.cursor = btn.disabled ? 'default' : 'pointer';
+      for (const [unitId, btn] of els.unitButtons) {
+        btn.style.display = panelState.built ? 'block' : 'none';
+        if (!panelState.built) continue;
+        btn.disabled = panelState.queueFull || !panelState.unitAffordability[unitId];
+      }
+
+      els.queueLabel.textContent =
+        panelState.built && panelState.queueLength > 0
+          ? `Queue: ${panelState.queueLength}${panelState.queueFull ? ' (full)' : ''} — building ${Math.floor((panelState.queueProgress ?? 0) * 100)}%`
+          : '';
+
+      for (const btn of [...(els.buildButton ? [els.buildButton] : []), ...els.unitButtons.values()]) {
+        btn.style.opacity = btn.disabled ? '0.5' : '1';
+        btn.style.cursor = btn.disabled ? 'default' : 'pointer';
+      }
     }
   }
 

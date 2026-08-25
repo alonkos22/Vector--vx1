@@ -1,16 +1,22 @@
 import * as THREE from 'three';
 import type { BuildingConfig } from '../config/buildings';
 
-/** A placed building: handles the under-construction visual and a single-slot production queue. */
+const MAX_QUEUE_SIZE = 5;
+
+interface QueuedItem {
+  unitId: string;
+  buildTimeSec: number;
+  remaining: number;
+}
+
+/** A placed building: handles the under-construction visual and a multi-item FIFO production queue. */
 export class Building {
   readonly config: BuildingConfig;
   readonly mesh: THREE.Mesh;
   readonly position: THREE.Vector3;
   isComplete: boolean;
   private constructionRemaining: number;
-  private productionUnitId: string | null = null;
-  private productionRemaining = 0;
-  private productionTotal = 0;
+  private readonly productionQueue: QueuedItem[] = [];
 
   constructor(config: BuildingConfig, position: THREE.Vector3, prebuilt = false) {
     this.config = config;
@@ -55,39 +61,55 @@ export class Building {
       return;
     }
 
-    if (this.productionUnitId) {
-      this.productionRemaining -= dt;
+    if (this.productionQueue.length > 0) {
+      this.productionQueue[0].remaining -= dt;
     }
-  }
-
-  isProducing(): boolean {
-    return this.productionUnitId !== null;
-  }
-
-  /** 0..1, or null when idle. */
-  productionProgress(): number | null {
-    if (!this.productionUnitId) return null;
-    return 1 - Math.max(this.productionRemaining, 0) / this.productionTotal;
-  }
-
-  startProduction(unitId: string, buildTimeSec: number): void {
-    this.productionUnitId = unitId;
-    this.productionRemaining = buildTimeSec;
-    this.productionTotal = buildTimeSec;
-  }
-
-  /** Returns the finished unit id once, clearing the queue slot. */
-  collectFinishedProduction(): string | null {
-    if (this.productionUnitId && this.productionRemaining <= 0) {
-      const id = this.productionUnitId;
-      this.productionUnitId = null;
-      return id;
-    }
-    return null;
   }
 
   constructionProgress(): number {
     if (this.isComplete) return 1;
     return 1 - Math.max(this.constructionRemaining, 0) / this.config.buildTimeSec;
+  }
+
+  canEnqueue(): boolean {
+    return this.productionQueue.length < MAX_QUEUE_SIZE;
+  }
+
+  enqueueProduction(unitId: string, buildTimeSec: number): void {
+    this.productionQueue.push({ unitId, buildTimeSec, remaining: buildTimeSec });
+  }
+
+  /** Cancels the most recently queued item (LIFO), returning its unit id so its cost can be refunded. */
+  cancelLastQueued(): string | null {
+    return this.productionQueue.pop()?.unitId ?? null;
+  }
+
+  isProducing(): boolean {
+    return this.productionQueue.length > 0;
+  }
+
+  queueLength(): number {
+    return this.productionQueue.length;
+  }
+
+  queuedUnitIds(): string[] {
+    return this.productionQueue.map((item) => item.unitId);
+  }
+
+  /** 0..1 progress of the item at the head of the queue, or null when idle. */
+  productionProgress(): number | null {
+    const head = this.productionQueue[0];
+    if (!head) return null;
+    return 1 - Math.max(head.remaining, 0) / head.buildTimeSec;
+  }
+
+  /** Returns the finished unit id once, dequeuing it and starting the next item. */
+  collectFinishedProduction(): string | null {
+    const head = this.productionQueue[0];
+    if (head && head.remaining <= 0) {
+      this.productionQueue.shift();
+      return head.unitId;
+    }
+    return null;
   }
 }

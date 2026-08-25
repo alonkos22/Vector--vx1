@@ -17,7 +17,14 @@ import { Unit } from './game/units/Unit';
 import { pathGrid } from './game/Pathfinding';
 import { EffectManager } from './game/CombatVFX';
 import { SelectionManager } from './game/Selection';
-import { HUD } from './ui/HUD';
+import { HUD, type HUDPanelDef, type HUDPanelState } from './ui/HUD';
+
+function formatCost(costCoreEnergy: number, costFactionResource: number, buildTimeSec: number): string {
+  const parts: string[] = [];
+  if (costCoreEnergy > 0) parts.push(`${costCoreEnergy}⚡`);
+  if (costFactionResource > 0) parts.push(`${costFactionResource}◆`);
+  return `${parts.join(' ')} · ${buildTimeSec}s`;
+}
 
 const MAP_HALF_EXTENT = 100;
 const FACTION = FACTIONS['cyber-nexus'];
@@ -158,14 +165,16 @@ for (let i = 0; i < STARTING_HARVESTERS; i++) {
 }
 
 // ---------------------------------------------------------------------------
-// Flux Siphon placement (click-to-place, independent of the future unit-
-// selection system landing in Milestone 4)
+// Building placement (click-to-place ghost preview), generalized across
+// every player-constructible building (Flux Siphon, Fabrication Node,
+// Drone Foundry).
 // ---------------------------------------------------------------------------
 
 const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-let placementActive = false;
-let ghostMesh: THREE.Mesh | null = null;
+
+let fabricationNode: Building | null = null;
+let droneFoundry: Building | null = null;
 
 function screenToGround(clientX: number, clientY: number): THREE.Vector3 | null {
   const ndc = new THREE.Vector2((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
@@ -174,22 +183,38 @@ function screenToGround(clientX: number, clientY: number): THREE.Vector3 | null 
   return raycaster.ray.intersectPlane(groundPlane, point) ? point : null;
 }
 
-function beginPlaceFluxSiphon(): void {
-  const config = CYBER_NEXUS_BUILDINGS['flux-siphon'];
-  if (fluxSiphon || placementActive) return;
+function getPlacedBuilding(buildingId: string): Building | null {
+  if (buildingId === 'flux-siphon') return fluxSiphon;
+  if (buildingId === 'fabrication-node') return fabricationNode;
+  if (buildingId === 'drone-foundry') return droneFoundry;
+  return null;
+}
+
+function setPlacedBuilding(buildingId: string, building: Building): void {
+  if (buildingId === 'flux-siphon') fluxSiphon = building;
+  else if (buildingId === 'fabrication-node') fabricationNode = building;
+  else if (buildingId === 'drone-foundry') droneFoundry = building;
+}
+
+let placementTarget: string | null = null;
+let ghostMesh: THREE.Mesh | null = null;
+
+function beginPlacement(buildingId: string): void {
+  const config = CYBER_NEXUS_BUILDINGS[buildingId];
+  if (!config || getPlacedBuilding(buildingId) || placementTarget) return;
   if (!economy.canAfford(config.costCoreEnergy, config.costFactionResource)) return;
 
-  placementActive = true;
+  placementTarget = buildingId;
   const geometry = new THREE.CylinderGeometry(config.footprint, config.footprint * 1.15, config.footprint * 1.6, 6);
   const material = new THREE.MeshBasicMaterial({ color: config.color, transparent: true, opacity: 0.4 });
   ghostMesh = new THREE.Mesh(geometry, material);
   ghostMesh.position.y = config.footprint * 0.8;
   scene.add(ghostMesh);
-  hud.setStatus('Placing Flux Siphon…');
+  hud.setStatus(`Placing ${config.name}…`);
 }
 
 function cancelPlacement(): void {
-  placementActive = false;
+  placementTarget = null;
   if (ghostMesh) {
     scene.remove(ghostMesh);
     ghostMesh = null;
@@ -198,20 +223,22 @@ function cancelPlacement(): void {
 }
 
 function confirmPlacement(point: THREE.Vector3): void {
-  const config = CYBER_NEXUS_BUILDINGS['flux-siphon'];
+  if (!placementTarget) return;
+  const config = CYBER_NEXUS_BUILDINGS[placementTarget];
   if (!economy.canAfford(config.costCoreEnergy, config.costFactionResource)) {
     cancelPlacement();
     return;
   }
   economy.spend(config.costCoreEnergy, config.costFactionResource);
-  fluxSiphon = new Building(config, point, false);
-  scene.add(fluxSiphon.mesh);
-  pathGrid.markCircleBlocked(fluxSiphon.position, config.footprint + 1);
+  const building = new Building(config, point, false);
+  scene.add(building.mesh);
+  pathGrid.markCircleBlocked(building.position, config.footprint + 1);
+  setPlacedBuilding(placementTarget, building);
   cancelPlacement();
 }
 
 renderer.domElement.addEventListener('mousemove', (e) => {
-  if (!placementActive || !ghostMesh) return;
+  if (!placementTarget || !ghostMesh) return;
   const point = screenToGround(e.clientX, e.clientY);
   if (point) {
     ghostMesh.position.x = point.x;
@@ -220,17 +247,17 @@ renderer.domElement.addEventListener('mousemove', (e) => {
 });
 
 renderer.domElement.addEventListener('click', (e) => {
-  if (!placementActive) return;
+  if (!placementTarget) return;
   const point = screenToGround(e.clientX, e.clientY);
   if (point) confirmPlacement(point);
 });
 
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Escape' && placementActive) cancelPlacement();
+  if (e.code === 'Escape' && placementTarget) cancelPlacement();
 });
 
 // ---------------------------------------------------------------------------
-// Combat units + placeholder training dummies (Milestone 4)
+// Combat units + placeholder training dummies
 // ---------------------------------------------------------------------------
 
 const combatUnits: CombatUnit[] = [];
@@ -241,11 +268,6 @@ function spawnCombatUnit(unitTypeId: string, position: THREE.Vector3): void {
   scene.add(unit.mesh);
   combatUnits.push(unit);
 }
-
-spawnCombatUnit('sentinel-drone', BASE_POSITION.clone().add(new THREE.Vector3(8, 0, 4)));
-spawnCombatUnit('sentinel-drone', BASE_POSITION.clone().add(new THREE.Vector3(8, 0, 7)));
-spawnCombatUnit('phase-trooper', BASE_POSITION.clone().add(new THREE.Vector3(11, 0, 2)));
-spawnCombatUnit('arc-walker', BASE_POSITION.clone().add(new THREE.Vector3(11, 0, 9)));
 
 const dummies: TrainingDummy[] = [];
 function spawnDummy(position: THREE.Vector3): void {
@@ -298,7 +320,7 @@ function pickDummyAt(clientX: number, clientY: number): TrainingDummy | null {
 
 function issueOrderAt(clientX: number, clientY: number): void {
   const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
-  if (selectedCombat.length === 0 || placementActive) return;
+  if (selectedCombat.length === 0 || placementTarget) return;
 
   const dummy = pickDummyAt(clientX, clientY);
   if (dummy) {
@@ -325,21 +347,74 @@ renderer.domElement.addEventListener('mouseup', (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// HUD
+// HUD + production queues
 // ---------------------------------------------------------------------------
 
-function tryTrainHarvester(): void {
-  const config = CYBER_NEXUS_UNITS['flux-harvester'];
-  if (coreSpire.isProducing()) return;
+const PRODUCER_BUILDING_IDS = ['core-spire', 'flux-siphon', 'fabrication-node', 'drone-foundry'];
+
+function tryQueueUnit(buildingId: string, unitTypeId: string): void {
+  const building = buildingId === 'core-spire' ? coreSpire : getPlacedBuilding(buildingId);
+  if (!building || !building.isComplete || !building.canEnqueue()) return;
+
+  const config = CYBER_NEXUS_UNITS[unitTypeId];
   if (!economy.canAfford(config.costCoreEnergy, config.costFactionResource)) return;
   economy.spend(config.costCoreEnergy, config.costFactionResource);
-  coreSpire.startProduction(config.id, config.buildTimeSec);
+  building.enqueueProduction(unitTypeId, config.buildTimeSec);
 }
 
-const hud = new HUD(app, {
-  onTrainHarvester: tryTrainHarvester,
-  onBeginPlaceFluxSiphon: beginPlaceFluxSiphon,
+function onProductionFinished(buildingPosition: THREE.Vector3, unitTypeId: string): void {
+  const jitter = new THREE.Vector3((Math.random() - 0.5) * 6, 0, (Math.random() - 0.5) * 6);
+  const spawnPos = buildingPosition.clone().add(jitter);
+  if (unitTypeId === 'flux-harvester') spawnHarvester(spawnPos);
+  else spawnCombatUnit(unitTypeId, spawnPos);
+}
+
+const panelDefs: HUDPanelDef[] = PRODUCER_BUILDING_IDS.map((buildingId) => {
+  const config = CYBER_NEXUS_BUILDINGS[buildingId];
+  return {
+    buildingId,
+    buildingName: config.name,
+    prebuilt: buildingId === 'core-spire',
+    buildCostLabel: formatCost(config.costCoreEnergy, config.costFactionResource, config.buildTimeSec),
+    units: config.produces.map((unitId) => {
+      const unitConfig = CYBER_NEXUS_UNITS[unitId];
+      return {
+        unitId,
+        name: unitConfig.name,
+        costLabel: formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec),
+      };
+    }),
+  };
 });
+
+const hud = new HUD(app, panelDefs, {
+  onBeginPlaceBuilding: beginPlacement,
+  onQueueUnit: tryQueueUnit,
+});
+
+function buildPanelState(buildingId: string): HUDPanelState {
+  const config = CYBER_NEXUS_BUILDINGS[buildingId];
+  const building = buildingId === 'core-spire' ? coreSpire : getPlacedBuilding(buildingId);
+  const built = building?.isComplete ?? false;
+
+  const unitAffordability: Record<string, boolean> = {};
+  for (const unitId of config.produces) {
+    const unitConfig = CYBER_NEXUS_UNITS[unitId];
+    unitAffordability[unitId] = economy.canAfford(unitConfig.costCoreEnergy, unitConfig.costFactionResource);
+  }
+
+  return {
+    buildingId,
+    built,
+    placementActive: placementTarget === buildingId,
+    constructionProgress: building && !building.isComplete ? building.constructionProgress() : null,
+    canAffordBuilding: economy.canAfford(config.costCoreEnergy, config.costFactionResource),
+    queueLength: building?.queueLength() ?? 0,
+    queueProgress: building?.productionProgress() ?? null,
+    queueFull: building ? !building.canEnqueue() : false,
+    unitAffordability,
+  };
+}
 
 function onResize(): void {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -358,11 +433,13 @@ function animate(): void {
 
   coreSpire.update(dt);
   fluxSiphon?.update(dt);
+  fabricationNode?.update(dt);
+  droneFoundry?.update(dt);
 
-  const finishedUnitId = coreSpire.collectFinishedProduction();
-  if (finishedUnitId === 'flux-harvester') {
-    const jitter = new THREE.Vector3((Math.random() - 0.5) * 6, 0, (Math.random() - 0.5) * 6);
-    spawnHarvester(BASE_POSITION.clone().add(jitter));
+  for (const building of [coreSpire, fluxSiphon, fabricationNode, droneFoundry]) {
+    if (!building) continue;
+    const finishedUnitId = building.collectFinishedProduction();
+    if (finishedUnitId) onProductionFinished(building.position, finishedUnitId);
   }
 
   for (const harvester of harvesters) harvester.update(dt, economy);
@@ -380,21 +457,17 @@ function animate(): void {
   selection.prune();
   updateSelectionHUD();
 
-  const trainCfg = CYBER_NEXUS_UNITS['flux-harvester'];
-  const siphonCfg = CYBER_NEXUS_BUILDINGS['flux-siphon'];
+  const supplyUsed =
+    harvesters.length * CYBER_NEXUS_UNITS['flux-harvester'].supply +
+    combatUnits.reduce((sum, u) => sum + (CYBER_NEXUS_UNITS[u.unitTypeId]?.supply ?? 0), 0);
+
   hud.update({
     coreEnergy: economy.coreEnergy,
     factionResource: economy.factionResource,
     factionResourceLabel: FACTION.factionResourceName,
-    harvesterCount: harvesters.length,
-    supplyUsed: harvesters.length * trainCfg.supply,
-    coreSpireProducing: coreSpire.isProducing(),
-    coreSpireProgress: coreSpire.productionProgress(),
-    fluxSiphonBuilt: fluxSiphon !== null,
-    fluxSiphonProgress: fluxSiphon && !fluxSiphon.isComplete ? fluxSiphon.constructionProgress() : null,
-    canAffordHarvester: economy.canAfford(trainCfg.costCoreEnergy, trainCfg.costFactionResource),
-    canAffordFluxSiphon: economy.canAfford(siphonCfg.costCoreEnergy, siphonCfg.costFactionResource),
-    placementModeActive: placementActive,
+    unitCount: harvesters.length + combatUnits.length,
+    supplyUsed,
+    panels: PRODUCER_BUILDING_IDS.map(buildPanelState),
   });
 
   rtsCamera.update(dt, input, window.innerWidth, window.innerHeight);
