@@ -11,6 +11,8 @@ export interface CombatStats {
   attackCooldown: number;
   windupTime: number;
   healthBarYOffset: number;
+  /** Simultaneous targets per attack (Hive Construct's spread-fire). Omit/1 = single target. */
+  multiTargetCount?: number;
 }
 
 export interface UnitConfig {
@@ -80,5 +82,32 @@ export const CYBER_NEXUS_UNITS: Record<string, UnitConfig> = {
     selectionRadius: 1.1,
     color: 0x2ea3ff,
     combat: { hp: 140, damage: 20, attackRange: 10, attackCooldown: 1.3, windupTime: 0.2, healthBarYOffset: 2.7 },
+  },
+  // --- Convergence (fusion) outputs — not directly producible, only reached via §3 recipes. ---
+  'hive-construct': {
+    id: 'hive-construct',
+    name: 'Hive Construct',
+    role: 'converged / swarm',
+    costCoreEnergy: 0,
+    costFactionResource: 0,
+    supply: 4,
+    buildTimeSec: 0,
+    moveSpeed: 6,
+    selectionRadius: 1.3,
+    color: 0x4fc3ff,
+    combat: { hp: 150, damage: 6, attackRange: 10, attackCooldown: 0.6, windupTime: 0.1, healthBarYOffset: 2.6, multiTargetCount: 4 },
+  },
+  'vanguard-executioner': {
+    id: 'vanguard-executioner',
+    name: 'Vanguard Executioner',
+    role: 'converged / heavy melee',
+    costCoreEnergy: 0,
+    costFactionResource: 0,
+    supply: 6,
+    buildTimeSec: 0,
+    moveSpeed: 5.5,
+    selectionRadius: 1.2,
+    color: 0x2ea3ff,
+    combat: { hp: 260, damage: 30, attackRange: 3.6, attackCooldown: 1.0, windupTime: 0.15, healthBarYOffset: 2.8 },
   },
 };

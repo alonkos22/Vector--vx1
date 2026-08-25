@@ -26,11 +26,14 @@ export class CombatUnit extends Unit implements Targetable {
   private readonly aggroRange: number;
   private readonly attackCooldownSec: number;
   private readonly windupSec: number;
+  private readonly multiTargetCount: number;
   private readonly effects: EffectManager;
   private readonly healthBar: HealthBar;
   private state: AttackState = 'idle';
   private cooldownRemaining = 0;
   private windupRemaining = 0;
+  private lastCandidates: Targetable[] = [];
+  private fusing = false;
 
   constructor(config: UnitConfig, ownerId: string, position: THREE.Vector3, effects: EffectManager) {
     const combat = config.combat;
@@ -45,6 +48,7 @@ export class CombatUnit extends Unit implements Targetable {
     this.aggroRange = combat.attackRange + AGGRO_RANGE_BONUS;
     this.attackCooldownSec = combat.attackCooldown;
     this.windupSec = combat.windupTime;
+    this.multiTargetCount = combat.multiTargetCount ?? 1;
     this.effects = effects;
 
     this.healthBar = new HealthBar(combat.healthBarYOffset);
@@ -68,10 +72,29 @@ export class CombatUnit extends Unit implements Targetable {
     this.state = 'idle';
   }
 
+  /** Marks this unit as consumed by a Convergence fusion: freezes it in place for the channel duration. */
+  beginFusing(): void {
+    this.fusing = true;
+    this.stopMoving();
+    this.setTarget(null);
+    this.healthBar.setForcedVisible(false);
+  }
+
+  isFusing(): boolean {
+    return this.fusing;
+  }
+
+  /** Silently removes this unit as a completed Convergence fusion's consumed input — no damage/death VFX. */
+  consumeForFusion(): void {
+    this.hp = 0;
+    this.destroy();
+  }
+
   /** `targetCandidates` lets an idle, unordered unit auto-acquire the nearest enemy in range (targeting: nearest). */
   update(dt: number, camera: THREE.Camera, targetCandidates: Targetable[] = []): void {
-    if (!this.isAlive()) return;
+    if (!this.isAlive() || this.fusing) return;
 
+    this.lastCandidates = targetCandidates;
     if (this.target && !this.target.isAlive()) this.target = null;
 
     if (!this.target && !this.isMoving()) {
@@ -122,12 +145,31 @@ export class CombatUnit extends Unit implements Targetable {
 
   private resolveAttack(): void {
     if (!this.target) return;
-    this.target.takeDamage(this.damage);
+    const targets = this.multiTargetCount > 1 ? this.pickMultiTargets() : [this.target];
 
     const origin = this.position.clone();
     origin.y = 1.3;
-    const impact = this.target.position.clone();
-    impact.y = 1.1;
-    this.effects.spawnLaserHit(origin, impact);
+    for (const target of targets) {
+      target.takeDamage(this.damage);
+      const impact = target.position.clone();
+      impact.y = 1.1;
+      this.effects.spawnLaserHit(origin, impact);
+    }
+  }
+
+  /** Hive Construct's spread-fire: the locked-on target plus the next-nearest enemies in range, up to multiTargetCount. */
+  private pickMultiTargets(): Targetable[] {
+    if (!this.target) return [];
+    const targets: Targetable[] = [this.target];
+    const others = this.lastCandidates
+      .filter(
+        (c) => c !== this.target && c.isAlive() && c.ownerId !== this.ownerId && this.position.distanceTo(c.position) <= this.attackRange,
+      )
+      .sort((a, b) => this.position.distanceTo(a.position) - this.position.distanceTo(b.position));
+    for (const candidate of others) {
+      if (targets.length >= this.multiTargetCount) break;
+      targets.push(candidate);
+    }
+    return targets;
   }
 }

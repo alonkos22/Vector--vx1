@@ -43,6 +43,9 @@ export class RTSCamera {
   private distance: number;
   private azimuth = Math.PI / 4;
   private readonly opts: RTSCameraOptions;
+  private shakeElapsed = 0;
+  private shakeDuration = 0;
+  private shakeIntensity = 0;
 
   constructor(aspect: number, opts: Partial<RTSCameraOptions> = {}) {
     this.opts = { ...DEFAULT_OPTIONS, ...opts };
@@ -61,7 +64,25 @@ export class RTSCamera {
     this.handleRotate(dt, input);
     this.handlePan(dt, input, viewportWidth, viewportHeight);
     this.updateCameraTransform();
+    this.applyShake(dt);
     input.endFrame();
+  }
+
+  /** Punches in a brief camera shake — for heavy impacts and, per the design doc, every Convergence fusion. */
+  triggerShake(intensity: number, durationSec: number): void {
+    this.shakeIntensity = intensity;
+    this.shakeDuration = durationSec;
+    this.shakeElapsed = 0;
+  }
+
+  private applyShake(dt: number): void {
+    if (this.shakeElapsed >= this.shakeDuration) return;
+    this.shakeElapsed += dt;
+    const remaining = Math.max(1 - this.shakeElapsed / this.shakeDuration, 0);
+    const magnitude = this.shakeIntensity * remaining;
+    this.camera.position.x += (Math.random() - 0.5) * magnitude;
+    this.camera.position.y += (Math.random() - 0.5) * magnitude * 0.5;
+    this.camera.position.z += (Math.random() - 0.5) * magnitude;
   }
 
   private handleZoom(input: InputManager): void {

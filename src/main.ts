@@ -17,6 +17,8 @@ import { Unit } from './game/units/Unit';
 import { pathGrid } from './game/Pathfinding';
 import { EffectManager } from './game/CombatVFX';
 import { SelectionManager } from './game/Selection';
+import { ConvergenceManager } from './game/Convergence';
+import { CYBER_NEXUS_CONVERGENCE } from './config/convergence';
 import { HUD, type HUDPanelDef, type HUDPanelState } from './ui/HUD';
 
 function formatCost(costCoreEnergy: number, costFactionResource: number, buildTimeSec: number): string {
@@ -279,12 +281,34 @@ spawnDummy(BASE_POSITION.clone().add(new THREE.Vector3(28, 0, 6)));
 spawnDummy(BASE_POSITION.clone().add(new THREE.Vector3(30, 0, -4)));
 
 // ---------------------------------------------------------------------------
+// Convergence (fusion), §3: a generic data-driven engine (ConvergenceManager)
+// consuming the CYBER_NEXUS_CONVERGENCE recipe table. Screen shake + a brief
+// hit-stop punctuate every completed fusion, per the "feel epic" build notes.
+// ---------------------------------------------------------------------------
+
+let hitStopRemaining = 0;
+function triggerHitStop(durationSec: number): void {
+  hitStopRemaining = Math.max(hitStopRemaining, durationSec);
+}
+
+function getAllBuildings(): Building[] {
+  return [coreSpire, fluxSiphon, fabricationNode, droneFoundry].filter((b): b is Building => b !== null);
+}
+
+const convergence = new ConvergenceManager(scene, effects, (outputUnitId, position) => {
+  spawnCombatUnit(outputUnitId, position);
+  rtsCamera.triggerShake(0.9, 0.3);
+  triggerHitStop(0.06);
+});
+
+// ---------------------------------------------------------------------------
 // Selection + orders
 // ---------------------------------------------------------------------------
 
 function updateSelectionHUD(): void {
   if (selection.selected.size === 0) {
     hud.setSelectionInfo('');
+    hud.setConvergenceOption(null);
     return;
   }
   const byType = new Map<string, number>();
@@ -293,6 +317,25 @@ function updateSelectionHUD(): void {
   }
   const parts = [...byType.entries()].map(([id, n]) => `${n}× ${CYBER_NEXUS_UNITS[id]?.name ?? id}`);
   hud.setSelectionInfo(`Selected: ${parts.join(', ')}`);
+
+  const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
+  const recipe = convergence.findMatchingRecipe(CYBER_NEXUS_CONVERGENCE, selectedCombat);
+  const canFuse = recipe && convergence.canAffordAndPlace(recipe, selectedCombat[0].position, economy, getAllBuildings());
+
+  if (recipe && canFuse) {
+    hud.setConvergenceOption({
+      label: `⚡ ${recipe.mechanicName}: Converge into ${recipe.name} (${recipe.extraCoreEnergyCost}⚡ · ${recipe.channelTimeSec}s)`,
+      onClick: () => {
+        const units = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
+        if (convergence.beginFusion(recipe, units, economy, getAllBuildings())) {
+          for (const u of units) selection.deselect(u);
+          updateSelectionHUD();
+        }
+      },
+    });
+  } else {
+    hud.setConvergenceOption(null);
+  }
 }
 
 const selection = new SelectionManager(
@@ -426,10 +469,15 @@ const clock = new THREE.Clock();
 
 function animate(): void {
   requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.1);
+  const rawDt = Math.min(clock.getDelta(), 0.1);
+  let dt = rawDt;
+  if (hitStopRemaining > 0) {
+    hitStopRemaining -= rawDt;
+    dt = rawDt * 0.05;
+  }
 
-  terrain.update(dt);
-  coreZone.update(dt);
+  terrain.update(rawDt);
+  coreZone.update(rawDt);
 
   coreSpire.update(dt);
   fluxSiphon?.update(dt);
@@ -452,7 +500,8 @@ function animate(): void {
     }
   }
   for (const dummy of dummies) dummy.update(dt, rtsCamera.camera);
-  effects.update(dt);
+  effects.update(rawDt);
+  convergence.update(dt);
 
   selection.prune();
   updateSelectionHUD();
@@ -470,7 +519,7 @@ function animate(): void {
     panels: PRODUCER_BUILDING_IDS.map(buildPanelState),
   });
 
-  rtsCamera.update(dt, input, window.innerWidth, window.innerHeight);
+  rtsCamera.update(rawDt, input, window.innerWidth, window.innerHeight);
   renderer.render(scene, rtsCamera.camera);
 }
 

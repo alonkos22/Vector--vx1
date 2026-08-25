@@ -8,9 +8,9 @@ interface ActiveEffect {
 }
 
 /**
- * Minimal reusable VFX spawner, keyed by trigger. Only on-attack exists so
- * far (Cyber-Nexus laser + impact flash per §6); on-death/on-spawn/on-fusion
- * triggers land alongside the milestones that need them.
+ * Minimal reusable VFX spawner, keyed by trigger. On-attack and on-fusion
+ * exist so far (§6); on-death/on-spawn triggers land alongside the
+ * milestones that need them.
  */
 export class EffectManager {
   private readonly scene: THREE.Scene;
@@ -57,6 +57,91 @@ export class EffectManager {
         flashMaterial.dispose();
       },
     });
+  }
+
+  /** Cyber-Nexus Synchronization channel per §6: a blue data-line connecting each fusing unit to the merge point, flickering for the channel duration. */
+  spawnSynchronizationLinks(unitPositions: THREE.Vector3[], center: THREE.Vector3, durationSec: number): void {
+    const lines: THREE.Line[] = [];
+    const materials: THREE.LineBasicMaterial[] = [];
+    for (const pos of unitPositions) {
+      const from = pos.clone();
+      from.y = 1;
+      const to = center.clone();
+      to.y = 1;
+      const geometry = new THREE.BufferGeometry().setFromPoints([from, to]);
+      const material = new THREE.LineBasicMaterial({ color: 0x4fc3ff, transparent: true, opacity: 0.9 });
+      const line = new THREE.Line(geometry, material);
+      this.scene.add(line);
+      lines.push(line);
+      materials.push(material);
+    }
+
+    this.active.push({
+      life: 0,
+      maxLife: durationSec,
+      tick: (t) => {
+        const flicker = 0.5 + Math.sin(t * Math.PI * 10) * 0.5;
+        for (const material of materials) material.opacity = 0.35 + flicker * 0.55;
+      },
+      dispose: () => {
+        for (const line of lines) {
+          this.scene.remove(line);
+          line.geometry.dispose();
+        }
+        for (const material of materials) material.dispose();
+      },
+    });
+  }
+
+  /** Cyber-Nexus Synchronization payoff per §6: a sharp, fast glitch-burst merge. */
+  spawnSynchronizationBurst(center: THREE.Vector3): void {
+    const point = center.clone();
+    point.y = 1.2;
+
+    const flashMaterial = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 1 });
+    const flashGeometry = new THREE.SphereGeometry(0.4, 10, 10);
+    const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+    flash.position.copy(point);
+    this.scene.add(flash);
+    this.active.push({
+      life: 0,
+      maxLife: 0.3,
+      tick: (t) => {
+        flash.scale.setScalar(1 + t * 9);
+        flashMaterial.opacity = 1 - t;
+      },
+      dispose: () => {
+        this.scene.remove(flash);
+        flashGeometry.dispose();
+        flashMaterial.dispose();
+      },
+    });
+
+    const shardCount = 10;
+    for (let i = 0; i < shardCount; i++) {
+      const angle = (i / shardCount) * Math.PI * 2;
+      const direction = new THREE.Vector3(Math.cos(angle), 0.4 + Math.random() * 0.4, Math.sin(angle));
+      const shardMaterial = new THREE.MeshBasicMaterial({ color: 0x4fc3ff, transparent: true, opacity: 1 });
+      const shard = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), shardMaterial);
+      shard.position.copy(point);
+      this.scene.add(shard);
+      const maxLife = 0.35 + Math.random() * 0.2;
+      this.active.push({
+        life: 0,
+        maxLife,
+        tick: (t) => {
+          shard.position.copy(point).addScaledVector(direction, t * 3.5);
+          shard.rotation.x += 0.4;
+          shard.rotation.y += 0.4;
+          shardMaterial.opacity = 1 - t;
+        },
+        dispose: () => {
+          this.scene.remove(shard);
+          shard.geometry.dispose();
+          shardMaterial.dispose();
+        },
+      });
+    }
   }
 
   update(dt: number): void {

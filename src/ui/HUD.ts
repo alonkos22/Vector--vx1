@@ -69,6 +69,7 @@ export class HUD {
   private readonly supplyEl: HTMLSpanElement;
   private readonly statusEl: HTMLDivElement;
   private readonly selectionEl: HTMLDivElement;
+  private readonly convergeButton: HTMLButtonElement;
   private readonly panels = new Map<string, PanelElements>();
 
   constructor(container: HTMLElement, panelDefs: HUDPanelDef[], callbacks: HUDCallbacks) {
@@ -117,6 +118,16 @@ export class HUD {
       pointer-events: none; display: none; user-select: none;
     `;
     container.appendChild(this.selectionEl);
+
+    this.convergeButton = document.createElement('button');
+    this.convergeButton.style.cssText = `
+      position: absolute; bottom: 52px; left: 12px;
+      font-size: 13px; color: #0b0d10; font-weight: 700; text-align: left;
+      background: linear-gradient(135deg, #9fe8ff, #4fc3ff); border: 1px solid #dff3ff;
+      border-radius: 6px; padding: 8px 14px; cursor: pointer; display: none;
+      box-shadow: 0 0 14px #4fc3ffaa;
+    `;
+    container.appendChild(this.convergeButton);
 
     const hintEl = document.createElement('div');
     hintEl.style.cssText = `
@@ -221,5 +232,16 @@ export class HUD {
   setSelectionInfo(text: string): void {
     this.selectionEl.style.display = text ? 'block' : 'none';
     this.selectionEl.textContent = text;
+  }
+
+  /** Shows/hides the Convergence action for the current selection. Pass null when no recipe matches. */
+  setConvergenceOption(option: { label: string; onClick: () => void } | null): void {
+    if (!option) {
+      this.convergeButton.style.display = 'none';
+      return;
+    }
+    this.convergeButton.style.display = 'block';
+    this.convergeButton.textContent = option.label;
+    this.convergeButton.onclick = option.onClick;
   }
 }
