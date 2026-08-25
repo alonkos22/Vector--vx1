@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { PlayerBase } from '../PlayerBase';
-import { CYBER_NEXUS_BUILDINGS } from '../../config/buildings';
 
 type ArmyState = 'massing' | 'attacking' | 'retreating';
 
@@ -13,9 +12,13 @@ const HOME_ARRIVAL_RADIUS = 15;
 /**
  * Basic scripted opponent: build-order + mass-and-attack + retreat-when-
  * losing, driven entirely through PlayerBase's public API — the same
- * economy/production/combat systems the human player uses. Runs on a slow
- * decision tick rather than every frame, and sees the whole map (no fog of
- * war for the AI — that's a rendering concern for the human's view only).
+ * economy/production/combat systems the human player uses. Addresses
+ * buildings purely by canonical role ('main'/'resourceDropoff'/
+ * 'basicProduction'/'heavyProduction'), never by a faction-specific id, so
+ * the exact same controller runs any faction's data unmodified (Milestone
+ * 9). Runs on a slow decision tick rather than every frame, and sees the
+ * whole map (no fog of war for the AI — that's a rendering concern for the
+ * human's view only).
  */
 export class AIController {
   private readonly base: PlayerBase;
@@ -40,29 +43,31 @@ export class AIController {
   }
 
   private manageEconomy(): void {
-    if (this.base.harvesters.length < HARVESTER_CAP) {
-      this.base.tryQueueUnit('core-spire', 'flux-harvester');
+    const harvesterUnitId = this.base.harvesterUnitId();
+    if (harvesterUnitId && this.base.harvesters.length < HARVESTER_CAP) {
+      this.base.tryQueueUnit('main', harvesterUnitId);
     }
 
-    if (this.base.canAffordBuilding('flux-siphon')) {
+    if (this.base.canAffordBuilding('resourceDropoff')) {
       const spot = this.pickResourceCentroid('factionResource') ?? this.nearBaseSpot(-8, 6);
-      this.base.constructBuilding('flux-siphon', spot);
+      this.base.constructBuilding('resourceDropoff', spot);
     }
-    if (this.base.canAffordBuilding('fabrication-node')) {
-      this.base.constructBuilding('fabrication-node', this.nearBaseSpot(8, -6));
+    if (this.base.canAffordBuilding('basicProduction')) {
+      this.base.constructBuilding('basicProduction', this.nearBaseSpot(8, -6));
     }
-    if (this.base.canAffordBuilding('drone-foundry')) {
-      this.base.constructBuilding('drone-foundry', this.nearBaseSpot(10, 6));
+    if (this.base.canAffordBuilding('heavyProduction')) {
+      this.base.constructBuilding('heavyProduction', this.nearBaseSpot(10, 6));
     }
   }
 
   private manageProduction(): void {
-    for (const buildingId of ['fabrication-node', 'drone-foundry']) {
-      const building = this.base.getPlacedBuilding(buildingId);
+    for (const role of ['basicProduction', 'heavyProduction'] as const) {
+      const building = this.base.getPlacedBuilding(role);
       if (!building || !building.isComplete) continue;
-      const produces = CYBER_NEXUS_BUILDINGS[buildingId].produces;
+      const produces = building.config.produces;
+      if (produces.length === 0) continue;
       const unitTypeId = produces[Math.floor(Math.random() * produces.length)];
-      this.base.tryQueueUnit(buildingId, unitTypeId);
+      this.base.tryQueueUnit(role, unitTypeId);
     }
   }
 

@@ -5,6 +5,7 @@ import type { Building } from '../Building';
 import type { PlayerEconomy } from '../Economy';
 import type { Targetable } from '../Targetable';
 import { HealthBar } from '../HealthBar';
+import { buildUnitVisual } from './visuals';
 
 type HarvesterState = 'toNode' | 'harvesting' | 'toDropoff' | 'depositing' | 'idle';
 
@@ -25,19 +26,8 @@ export class FluxHarvester extends Unit implements Targetable {
   private node: ResourceNode | null = null;
   private dropoff: Building | null = null;
 
-  constructor(ownerId: string, position: THREE.Vector3, moveSpeed: number, selectionRadius: number) {
-    const geometry = new THREE.CapsuleGeometry(0.5, 0.8, 4, 8);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x4fc3ff,
-      emissive: 0x0d3a55,
-      emissiveIntensity: 0.6,
-      metalness: 0.6,
-      roughness: 0.35,
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = true;
-    mesh.position.y = 0.9;
-    super('flux-harvester', ownerId, mesh, position, moveSpeed, selectionRadius);
+  constructor(unitTypeId: string, ownerId: string, position: THREE.Vector3, moveSpeed: number, selectionRadius: number) {
+    super(unitTypeId, ownerId, buildUnitVisual(unitTypeId), position, moveSpeed, selectionRadius);
 
     this.healthBar = new HealthBar(1.7);
     this.mesh.add(this.healthBar.group);

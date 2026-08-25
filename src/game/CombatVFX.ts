@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { AttackVfxStyle } from '../config/factions';
 
 interface ActiveEffect {
   life: number;
@@ -16,8 +17,20 @@ export class EffectManager {
   private readonly scene: THREE.Scene;
   private readonly active: ActiveEffect[] = [];
 
+  private readonly attackHitHandlers: Record<AttackVfxStyle, (from: THREE.Vector3, to: THREE.Vector3) => void> = {
+    laser: (from, to) => this.spawnLaserHit(from, to),
+    'lava-arc': (from, to) => this.spawnLavaArcHit(from, to),
+    'light-beam': (from, to) => this.spawnLightBeamHit(from, to),
+    projectile: (from, to) => this.spawnProjectileHit(from, to),
+  };
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+  }
+
+  /** Faction-agnostic attack-hit dispatcher (§6): CombatUnit calls this with its faction's `attackVfxStyle` and never needs to know which faction it is. */
+  spawnAttackHit(style: AttackVfxStyle, from: THREE.Vector3, to: THREE.Vector3): void {
+    this.attackHitHandlers[style](from, to);
   }
 
   /** Cyber-Nexus attack VFX per §6: thin neon-blue laser line + a small impact flash. */
@@ -55,6 +68,160 @@ export class EffectManager {
         this.scene.remove(flash);
         flashGeometry.dispose();
         flashMaterial.dispose();
+      },
+    });
+  }
+
+  /** Pyroliths attack VFX per §6: a thick lava arc that leaves a brief burning mark on the ground at the impact point. */
+  spawnLavaArcHit(from: THREE.Vector3, to: THREE.Vector3): void {
+    const arcMid = from.clone().lerp(to, 0.5);
+    arcMid.y += 0.6;
+    const curve = new THREE.QuadraticBezierCurve3(from, arcMid, to);
+    const geometry = new THREE.TubeGeometry(curve, 12, 0.12, 6, false);
+    const material = new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: 0.95 });
+    const arc = new THREE.Mesh(geometry, material);
+    this.scene.add(arc);
+    this.active.push({
+      life: 0,
+      maxLife: 0.16,
+      tick: (t) => {
+        material.opacity = 0.95 * (1 - t);
+      },
+      dispose: () => {
+        this.scene.remove(arc);
+        geometry.dispose();
+        material.dispose();
+      },
+    });
+
+    const burnGeometry = new THREE.CircleGeometry(0.55, 10);
+    const burnMaterial = new THREE.MeshBasicMaterial({ color: 0x552005, transparent: true, opacity: 0.8 });
+    const burn = new THREE.Mesh(burnGeometry, burnMaterial);
+    burn.rotation.x = -Math.PI / 2;
+    burn.position.copy(to);
+    burn.position.y = 0.05;
+    this.scene.add(burn);
+    this.active.push({
+      life: 0,
+      maxLife: 1.1,
+      tick: (t) => {
+        burnMaterial.opacity = 0.8 * (1 - t);
+      },
+      dispose: () => {
+        this.scene.remove(burn);
+        burnGeometry.dispose();
+        burnMaterial.dispose();
+      },
+    });
+  }
+
+  /** Solari Archons attack VFX per §6: a continuous light beam whose impact disperses into small light particles. */
+  spawnLightBeamHit(from: THREE.Vector3, to: THREE.Vector3): void {
+    const geometry = new THREE.BufferGeometry().setFromPoints([from, to]);
+    const material = new THREE.LineBasicMaterial({ color: 0xf4c542, transparent: true, opacity: 1 });
+    const beam = new THREE.Line(geometry, material);
+    this.scene.add(beam);
+    this.active.push({
+      life: 0,
+      maxLife: 0.2,
+      tick: (t) => {
+        material.opacity = 1 - t;
+      },
+      dispose: () => {
+        this.scene.remove(beam);
+        geometry.dispose();
+        material.dispose();
+      },
+    });
+
+    const particleCount = 6;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (i / particleCount) * Math.PI * 2;
+      const direction = new THREE.Vector3(Math.cos(angle), 0.3 + Math.random() * 0.5, Math.sin(angle));
+      const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 1 });
+      const particle = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), particleMaterial);
+      particle.position.copy(to);
+      this.scene.add(particle);
+      const maxLife = 0.25 + Math.random() * 0.15;
+      this.active.push({
+        life: 0,
+        maxLife,
+        tick: (t) => {
+          particle.position.copy(to).addScaledVector(direction, t * 1.8);
+          particleMaterial.opacity = 1 - t;
+        },
+        dispose: () => {
+          this.scene.remove(particle);
+          particle.geometry.dispose();
+          particleMaterial.dispose();
+        },
+      });
+    }
+  }
+
+  /**
+   * Frost-Forged attack VFX per §6: a physical projectile with a brief smoke
+   * trail; impact is metal sparks plus a small ice cloud. Approximated as an
+   * instantaneous streak-plus-impact (same resolve-on-hit shape as the other
+   * three styles) rather than a time-of-flight projectile.
+   */
+  spawnProjectileHit(from: THREE.Vector3, to: THREE.Vector3): void {
+    const geometry = new THREE.BufferGeometry().setFromPoints([from, to]);
+    const material = new THREE.LineBasicMaterial({ color: 0x6f7a80, transparent: true, opacity: 0.7 });
+    const streak = new THREE.Line(geometry, material);
+    this.scene.add(streak);
+    this.active.push({
+      life: 0,
+      maxLife: 0.1,
+      tick: (t) => {
+        material.opacity = 0.7 * (1 - t);
+      },
+      dispose: () => {
+        this.scene.remove(streak);
+        geometry.dispose();
+        material.dispose();
+      },
+    });
+
+    const sparkCount = 7;
+    for (let i = 0; i < sparkCount; i++) {
+      const angle = (i / sparkCount) * Math.PI * 2;
+      const direction = new THREE.Vector3(Math.cos(angle), 0.4 + Math.random() * 0.4, Math.sin(angle));
+      const sparkMaterial = new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 1 });
+      const spark = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), sparkMaterial);
+      spark.position.copy(to);
+      this.scene.add(spark);
+      const maxLife = 0.2 + Math.random() * 0.15;
+      this.active.push({
+        life: 0,
+        maxLife,
+        tick: (t) => {
+          spark.position.copy(to).addScaledVector(direction, t * 2.4);
+          sparkMaterial.opacity = 1 - t;
+        },
+        dispose: () => {
+          this.scene.remove(spark);
+          spark.geometry.dispose();
+          sparkMaterial.dispose();
+        },
+      });
+    }
+
+    const cloudMaterial = new THREE.MeshBasicMaterial({ color: 0x9fe8f0, transparent: true, opacity: 0.55 });
+    const cloud = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), cloudMaterial);
+    cloud.position.copy(to);
+    this.scene.add(cloud);
+    this.active.push({
+      life: 0,
+      maxLife: 0.35,
+      tick: (t) => {
+        cloud.scale.setScalar(1 + t * 1.8);
+        cloudMaterial.opacity = 0.55 * (1 - t);
+      },
+      dispose: () => {
+        this.scene.remove(cloud);
+        cloud.geometry.dispose();
+        cloudMaterial.dispose();
       },
     });
   }

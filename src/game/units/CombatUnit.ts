@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Unit } from './Unit';
 import type { UnitConfig } from '../../config/units';
+import type { AttackVfxStyle } from '../../config/factions';
 import type { Targetable } from '../Targetable';
 import type { EffectManager } from '../CombatVFX';
 import { HealthBar } from '../HealthBar';
@@ -28,6 +29,7 @@ export class CombatUnit extends Unit implements Targetable {
   private readonly windupSec: number;
   private readonly multiTargetCount: number;
   private readonly effects: EffectManager;
+  private readonly attackVfxStyle: AttackVfxStyle;
   private readonly healthBar: HealthBar;
   private state: AttackState = 'idle';
   private cooldownRemaining = 0;
@@ -35,7 +37,7 @@ export class CombatUnit extends Unit implements Targetable {
   private lastCandidates: Targetable[] = [];
   private fusing = false;
 
-  constructor(config: UnitConfig, ownerId: string, position: THREE.Vector3, effects: EffectManager) {
+  constructor(config: UnitConfig, ownerId: string, position: THREE.Vector3, effects: EffectManager, attackVfxStyle: AttackVfxStyle) {
     const combat = config.combat;
     if (!combat) throw new Error(`Unit type "${config.id}" has no combat stats`);
 
@@ -50,6 +52,7 @@ export class CombatUnit extends Unit implements Targetable {
     this.windupSec = combat.windupTime;
     this.multiTargetCount = combat.multiTargetCount ?? 1;
     this.effects = effects;
+    this.attackVfxStyle = attackVfxStyle;
 
     this.healthBar = new HealthBar(combat.healthBarYOffset);
     this.mesh.add(this.healthBar.group);
@@ -153,7 +156,7 @@ export class CombatUnit extends Unit implements Targetable {
       target.takeDamage(this.damage);
       const impact = target.position.clone();
       impact.y = 1.1;
-      this.effects.spawnLaserHit(origin, impact);
+      this.effects.spawnAttackHit(this.attackVfxStyle, origin, impact);
     }
   }
 

@@ -31,7 +31,16 @@ function formatCost(costCoreEnergy: number, costFactionResource: number, buildTi
 }
 
 const MAP_HALF_EXTENT = 100;
-const FACTION = FACTIONS['cyber-nexus'];
+const PLAYER_FACTION_ID = 'cyber-nexus';
+/**
+ * The AI opponent's faction (Milestone 9's live proof that PlayerBase/
+ * AIController are faction-agnostic). Frost-Forged: harvester-based like
+ * Cyber-Nexus (verifiable with the same established testing pattern) with
+ * strong visual/flavor contrast. Try 'pyroliths' or 'solari-archons' here to
+ * exercise the other factions instead — no other code changes needed.
+ */
+const AI_FACTION_ID = 'frost-forged';
+const FACTION = FACTIONS[PLAYER_FACTION_ID];
 const PLAYER_BASE_POSITION = new THREE.Vector3(-55, 0, -55);
 const AI_BASE_POSITION = new THREE.Vector3(55, 0, 55);
 const STARTING_HARVESTERS = 2;
@@ -146,8 +155,8 @@ pathGrid.markCircleBlocked(new THREE.Vector3(0, 0, 0), 9);
 // heuristics for the AI.
 // ---------------------------------------------------------------------------
 
-const playerBase = new PlayerBase('player', scene, effects, PLAYER_BASE_POSITION, STARTING_CORE_ENERGY);
-const aiBase = new PlayerBase('ai', scene, effects, AI_BASE_POSITION, STARTING_CORE_ENERGY);
+const playerBase = new PlayerBase(PLAYER_FACTION_ID, 'player', scene, effects, PLAYER_BASE_POSITION, STARTING_CORE_ENERGY);
+const aiBase = new PlayerBase(AI_FACTION_ID, 'ai', scene, effects, AI_BASE_POSITION, STARTING_CORE_ENERGY);
 
 // Core Energy veins + Data-Flux nodes native to the Cyber-Nexus metal-plains
 // home biome, mirrored 180° around each base (sign flips every offset).

@@ -24,4 +24,28 @@ export const BIOMES: Record<string, BiomeConfig> = {
     roughness: 0.35,
     metalness: 0.75,
   },
+  pyroliths: {
+    id: 'pyroliths',
+    name: 'Lava Fields',
+    groundColor: 0x2a2016,
+    veinColor: 0xff6a1a,
+    roughness: 0.85,
+    metalness: 0.1,
+  },
+  'solari-archons': {
+    id: 'solari-archons',
+    name: 'Open Plains',
+    groundColor: 0xe8e4d8,
+    veinColor: 0xf4c542,
+    roughness: 0.5,
+    metalness: 0.15,
+  },
+  'frost-forged': {
+    id: 'frost-forged',
+    name: 'Frozen Peaks',
+    groundColor: 0xc9dde3,
+    veinColor: 0x4fd8e0,
+    roughness: 0.4,
+    metalness: 0.2,
+  },
 };

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { CYBER_NEXUS_BUILDINGS } from '../config/buildings';
-import { CYBER_NEXUS_UNITS } from '../config/units';
+import { BUILDINGS_BY_FACTION, BUILDING_ROLES, type BuildingConfig, type BuildingRole } from '../config/buildings';
+import { UNITS_BY_FACTION, type UnitConfig } from '../config/units';
+import { FACTIONS, type FactionConfig } from '../config/factions';
 import { PlayerEconomy } from './Economy';
 import { Building } from './Building';
 import { ResourceNode, type ResourceType } from './ResourceNode';
@@ -15,40 +16,62 @@ import { pathGrid } from './Pathfinding';
  * One faction base's full economy/production/army: everything the human
  * player and the AI opponent both need, so both are driven by the exact
  * same underlying systems and differ only in who calls the methods (UI
- * clicks vs. AIController heuristics per Milestone 7).
+ * clicks vs. AIController heuristics per Milestone 7) and which faction's
+ * data (Milestone 9) they were constructed with.
+ *
+ * Buildings are addressed by canonical role ('main'/'resourceDropoff'/
+ * 'basicProduction'/'heavyProduction') internally, but every public method
+ * also accepts a faction-specific building id (e.g. 'core-spire') via
+ * `resolveRole` — so the player-facing UI (always Cyber-Nexus, addresses by
+ * id) and AIController (faction-agnostic, addresses by role) both work
+ * unmodified against any faction.
  */
 export class PlayerBase {
+  readonly factionId: string;
   readonly ownerId: string;
   readonly economy: PlayerEconomy;
-  readonly coreSpire: Building;
+  readonly mainBuilding: Building;
   readonly basePosition: THREE.Vector3;
-  fluxSiphon: Building | null = null;
-  fabricationNode: Building | null = null;
-  droneFoundry: Building | null = null;
   readonly harvesters: FluxHarvester[] = [];
   readonly combatUnits: CombatUnit[] = [];
   readonly resourceNodes: ResourceNode[] = [];
 
   private readonly scene: THREE.Scene;
   private readonly effects: EffectManager;
+  private readonly factionConfig: FactionConfig;
+  private readonly buildingsConfig: Record<BuildingRole, BuildingConfig>;
+  private readonly unitsConfig: Record<string, UnitConfig>;
+  private readonly buildingsByRole: Partial<Record<BuildingRole, Building>> = {};
   private assignedToEnergy = 0;
   private assignedToFlux = 0;
 
-  constructor(ownerId: string, scene: THREE.Scene, effects: EffectManager, basePosition: THREE.Vector3, startingCoreEnergy: number) {
+  constructor(
+    factionId: string,
+    ownerId: string,
+    scene: THREE.Scene,
+    effects: EffectManager,
+    basePosition: THREE.Vector3,
+    startingCoreEnergy: number,
+  ) {
+    this.factionId = factionId;
     this.ownerId = ownerId;
     this.scene = scene;
     this.effects = effects;
     this.basePosition = basePosition.clone();
     this.economy = new PlayerEconomy(startingCoreEnergy, 0);
+    this.factionConfig = FACTIONS[factionId];
+    this.buildingsConfig = BUILDINGS_BY_FACTION[factionId];
+    this.unitsConfig = UNITS_BY_FACTION[factionId];
 
-    this.coreSpire = new Building(CYBER_NEXUS_BUILDINGS['core-spire'], ownerId, this.basePosition, true);
-    scene.add(this.coreSpire.mesh);
-    pathGrid.markCircleBlocked(this.coreSpire.position, CYBER_NEXUS_BUILDINGS['core-spire'].footprint + 1);
+    const mainConfig = this.buildingsConfig.main;
+    this.mainBuilding = new Building(mainConfig, ownerId, this.basePosition, true);
+    scene.add(this.mainBuilding.mesh);
+    pathGrid.markCircleBlocked(this.mainBuilding.position, mainConfig.footprint + 1);
   }
 
   /** The prototype's win/lose condition per the build notes: losing the main structure. */
   isDefeated(): boolean {
-    return !this.coreSpire.isAlive();
+    return !this.mainBuilding.isAlive();
   }
 
   addResourceNode(type: ResourceType, offsetX: number, offsetZ: number): void {
@@ -73,18 +96,45 @@ export class PlayerBase {
   }
 
   private chooseResourceType(): ResourceType {
-    if (!this.fluxSiphon || !this.fluxSiphon.isComplete) return 'coreEnergy';
+    const dropoff = this.getBuildingByRole('resourceDropoff');
+    if (!dropoff || !dropoff.isComplete) return 'coreEnergy';
     return this.assignedToEnergy <= this.assignedToFlux ? 'coreEnergy' : 'factionResource';
   }
 
-  spawnHarvester(position: THREE.Vector3): FluxHarvester {
-    const config = CYBER_NEXUS_UNITS['flux-harvester'];
-    const harvester = new FluxHarvester(this.ownerId, position, config.moveSpeed, config.selectionRadius);
+  /** Resolves either a canonical role (AIController) or a faction-specific building id (player-facing UI) to a role. */
+  private resolveRole(buildingIdOrRole: string): BuildingRole | null {
+    if ((BUILDING_ROLES as string[]).includes(buildingIdOrRole)) return buildingIdOrRole as BuildingRole;
+    for (const role of BUILDING_ROLES) {
+      if (this.buildingsConfig[role].id === buildingIdOrRole) return role;
+    }
+    return null;
+  }
+
+  getBuildingByRole(role: BuildingRole): Building | null {
+    if (role === 'main') return this.mainBuilding;
+    return this.buildingsByRole[role] ?? null;
+  }
+
+  getPlacedBuilding(buildingIdOrRole: string): Building | null {
+    const role = this.resolveRole(buildingIdOrRole);
+    return role ? this.getBuildingByRole(role) : null;
+  }
+
+  /** null when the faction has no harvester unit at all (Solari Archons' passive economy). */
+  harvesterUnitId(): string | null {
+    return this.factionConfig.harvesterUnitId;
+  }
+
+  spawnHarvester(position: THREE.Vector3): FluxHarvester | null {
+    const harvesterUnitId = this.factionConfig.harvesterUnitId;
+    if (!harvesterUnitId) return null;
+    const config = this.unitsConfig[harvesterUnitId];
+    const harvester = new FluxHarvester(harvesterUnitId, this.ownerId, position, config.moveSpeed, config.selectionRadius);
     this.scene.add(harvester.mesh);
     this.harvesters.push(harvester);
 
     const type = this.chooseResourceType();
-    const dropoff = type === 'coreEnergy' ? this.coreSpire : this.fluxSiphon;
+    const dropoff = type === 'coreEnergy' ? this.mainBuilding : this.getBuildingByRole('resourceDropoff');
     const node = this.findNearestNode(type, position);
     if (node && dropoff) {
       harvester.assign(node, dropoff);
@@ -95,50 +145,38 @@ export class PlayerBase {
   }
 
   spawnCombatUnit(unitTypeId: string, position: THREE.Vector3): CombatUnit {
-    const config = CYBER_NEXUS_UNITS[unitTypeId];
-    const unit = new CombatUnit(config, this.ownerId, position, this.effects);
+    const config = this.unitsConfig[unitTypeId];
+    const unit = new CombatUnit(config, this.ownerId, position, this.effects, this.factionConfig.attackVfxStyle);
     this.scene.add(unit.mesh);
     this.combatUnits.push(unit);
     return unit;
   }
 
-  getPlacedBuilding(buildingId: string): Building | null {
-    if (buildingId === 'core-spire') return this.coreSpire;
-    if (buildingId === 'flux-siphon') return this.fluxSiphon;
-    if (buildingId === 'fabrication-node') return this.fabricationNode;
-    if (buildingId === 'drone-foundry') return this.droneFoundry;
-    return null;
-  }
-
-  private setPlacedBuilding(buildingId: string, building: Building): void {
-    if (buildingId === 'flux-siphon') this.fluxSiphon = building;
-    else if (buildingId === 'fabrication-node') this.fabricationNode = building;
-    else if (buildingId === 'drone-foundry') this.droneFoundry = building;
-  }
-
-  canAffordBuilding(buildingId: string): boolean {
-    if (this.getPlacedBuilding(buildingId)) return false;
-    const config = CYBER_NEXUS_BUILDINGS[buildingId];
+  canAffordBuilding(buildingIdOrRole: string): boolean {
+    const role = this.resolveRole(buildingIdOrRole);
+    if (!role || role === 'main' || this.getBuildingByRole(role)) return false;
+    const config = this.buildingsConfig[role];
     return this.economy.canAfford(config.costCoreEnergy, config.costFactionResource);
   }
 
   /** Constructs a building immediately at the given point — used by the player's placement-confirm and the AI's instant construction alike. */
-  constructBuilding(buildingId: string, point: THREE.Vector3): Building | null {
-    if (!this.canAffordBuilding(buildingId)) return null;
-    const config = CYBER_NEXUS_BUILDINGS[buildingId];
+  constructBuilding(buildingIdOrRole: string, point: THREE.Vector3): Building | null {
+    const role = this.resolveRole(buildingIdOrRole);
+    if (!role || role === 'main' || !this.canAffordBuilding(buildingIdOrRole)) return null;
+    const config = this.buildingsConfig[role];
     this.economy.spend(config.costCoreEnergy, config.costFactionResource);
     const building = new Building(config, this.ownerId, point, false);
     this.scene.add(building.mesh);
     pathGrid.markCircleBlocked(building.position, config.footprint + 1);
-    this.setPlacedBuilding(buildingId, building);
+    this.buildingsByRole[role] = building;
     return building;
   }
 
-  tryQueueUnit(buildingId: string, unitTypeId: string): boolean {
-    const building = this.getPlacedBuilding(buildingId);
+  tryQueueUnit(buildingIdOrRole: string, unitTypeId: string): boolean {
+    const building = this.getPlacedBuilding(buildingIdOrRole);
     if (!building || !building.isComplete || !building.canEnqueue()) return false;
-    const config = CYBER_NEXUS_UNITS[unitTypeId];
-    if (!this.economy.canAfford(config.costCoreEnergy, config.costFactionResource)) return false;
+    const config = this.unitsConfig[unitTypeId];
+    if (!config || !this.economy.canAfford(config.costCoreEnergy, config.costFactionResource)) return false;
     this.economy.spend(config.costCoreEnergy, config.costFactionResource);
     building.enqueueProduction(unitTypeId, config.buildTimeSec);
     return true;
@@ -147,18 +185,21 @@ export class PlayerBase {
   private onProductionFinished(buildingPosition: THREE.Vector3, unitTypeId: string): void {
     const jitter = new THREE.Vector3((Math.random() - 0.5) * 6, 0, (Math.random() - 0.5) * 6);
     const spawnPos = buildingPosition.clone().add(jitter);
-    if (unitTypeId === 'flux-harvester') this.spawnHarvester(spawnPos);
-    else this.spawnCombatUnit(unitTypeId, spawnPos);
+    const config = this.unitsConfig[unitTypeId];
+    if (config?.combat) this.spawnCombatUnit(unitTypeId, spawnPos);
+    else this.spawnHarvester(spawnPos);
   }
 
   allBuildings(): Building[] {
-    return [this.coreSpire, this.fluxSiphon, this.fabricationNode, this.droneFoundry].filter((b): b is Building => b !== null);
+    return BUILDING_ROLES.map((role) => this.getBuildingByRole(role)).filter((b): b is Building => b !== null);
   }
 
   supplyUsed(): number {
+    const harvesterUnitId = this.factionConfig.harvesterUnitId;
+    const harvesterSupply = harvesterUnitId ? (this.unitsConfig[harvesterUnitId]?.supply ?? 0) : 0;
     return (
-      this.harvesters.length * CYBER_NEXUS_UNITS['flux-harvester'].supply +
-      this.combatUnits.reduce((sum, u) => sum + (CYBER_NEXUS_UNITS[u.unitTypeId]?.supply ?? 0), 0)
+      this.harvesters.length * harvesterSupply +
+      this.combatUnits.reduce((sum, u) => sum + (this.unitsConfig[u.unitTypeId]?.supply ?? 0), 0)
     );
   }
 
@@ -168,32 +209,38 @@ export class PlayerBase {
     for (const building of this.allBuildings()) {
       sources.push({ position: building.position, radius: building.config.visionRadius });
     }
+    const harvesterUnitId = this.factionConfig.harvesterUnitId;
+    const harvesterVision = harvesterUnitId ? (this.unitsConfig[harvesterUnitId]?.visionRadius ?? 8) : 8;
     for (const harvester of this.harvesters) {
-      sources.push({ position: harvester.position, radius: CYBER_NEXUS_UNITS['flux-harvester'].visionRadius });
+      sources.push({ position: harvester.position, radius: harvesterVision });
     }
     for (const unit of this.combatUnits) {
-      sources.push({ position: unit.position, radius: CYBER_NEXUS_UNITS[unit.unitTypeId]?.visionRadius ?? 8 });
+      sources.push({ position: unit.position, radius: this.unitsConfig[unit.unitTypeId]?.visionRadius ?? 8 });
     }
     return sources;
   }
 
   updateEconomy(dt: number, camera: THREE.Camera): void {
-    this.coreSpire.update(dt, camera);
-    this.fluxSiphon?.update(dt, camera);
-    this.fabricationNode?.update(dt, camera);
-    this.droneFoundry?.update(dt, camera);
+    for (const building of this.allBuildings()) building.update(dt, camera);
 
     for (const building of this.allBuildings()) {
       const finishedUnitId = building.collectFinishedProduction();
       if (finishedUnitId) this.onProductionFinished(building.position, finishedUnitId);
     }
 
-    this.cleanUpDestroyedBuilding(this.fluxSiphon, () => (this.fluxSiphon = null));
-    this.cleanUpDestroyedBuilding(this.fabricationNode, () => (this.fabricationNode = null));
-    this.cleanUpDestroyedBuilding(this.droneFoundry, () => (this.droneFoundry = null));
+    for (const role of BUILDING_ROLES) {
+      if (role === 'main') continue;
+      const building = this.buildingsByRole[role];
+      this.cleanUpDestroyedBuilding(building ?? null, () => delete this.buildingsByRole[role]);
+    }
+
+    if (this.factionConfig.economyMode === 'passive') {
+      this.economy.addCoreEnergy((this.factionConfig.passiveCoreEnergyPerSec ?? 0) * dt);
+      this.economy.addFactionResource((this.factionConfig.passiveFactionResourcePerSec ?? 0) * dt);
+    }
   }
 
-  /** Non-Core-Spire buildings are removed on death (with a destruction VFX); Core Spire death is the loss condition, left in place for the match-end screen. */
+  /** Non-main buildings are removed on death (with a destruction VFX); main-structure death is the loss condition, left in place for the match-end screen. */
   private cleanUpDestroyedBuilding(building: Building | null, clear: () => void): void {
     if (!building || building.isAlive()) return;
     this.scene.remove(building.mesh);
