@@ -399,7 +399,7 @@ renderer.domElement.addEventListener('mouseup', (e) => {
 // HUD + production queues
 // ---------------------------------------------------------------------------
 
-const PRODUCER_BUILDING_IDS = ['core-spire', 'flux-siphon', 'fabrication-node', 'drone-foundry'];
+const PRODUCER_BUILDING_IDS = ['nexus-core', 'flux-siphon', 'cyber-forge', 'emp-arc-turret'];
 
 function tryQueueUnit(buildingId: string, unitTypeId: string): void {
   playerBase.tryQueueUnit(buildingId, unitTypeId);
@@ -410,7 +410,7 @@ const panelDefs: HUDPanelDef[] = PRODUCER_BUILDING_IDS.map((buildingId) => {
   return {
     buildingId,
     buildingName: config.name,
-    prebuilt: buildingId === 'core-spire',
+    prebuilt: buildingId === 'nexus-core',
     buildCostLabel: formatCost(config.costCoreEnergy, config.costFactionResource, config.buildTimeSec),
     units: config.produces.map((unitId) => {
       const unitConfig = CYBER_NEXUS_UNITS[unitId];

@@ -21,7 +21,7 @@ import { pathGrid } from './Pathfinding';
  *
  * Buildings are addressed by canonical role ('main'/'resourceDropoff'/
  * 'basicProduction'/'heavyProduction') internally, but every public method
- * also accepts a faction-specific building id (e.g. 'core-spire') via
+ * also accepts a faction-specific building id (e.g. 'nexus-core') via
  * `resolveRole` — so the player-facing UI (always Cyber-Nexus, addresses by
  * id) and AIController (faction-agnostic, addresses by role) both work
  * unmodified against any faction.

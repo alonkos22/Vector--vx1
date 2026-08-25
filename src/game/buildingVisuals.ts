@@ -18,13 +18,13 @@ function withShadows(object: THREE.Object3D): THREE.Object3D {
   return object;
 }
 
-function makeMaterial(color: number): THREE.MeshStandardMaterial {
+function makeMaterial(color: number, roughness: number, metalness: number): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
     color,
     emissive: color,
     emissiveIntensity: 0.1,
-    roughness: 0.4,
-    metalness: 0.6,
+    roughness,
+    metalness,
   });
 }
 
@@ -141,8 +141,10 @@ export function buildBuildingVisual(
   shapeKind: BuildingRole,
   footprint: number,
   color: number,
+  roughness: number,
+  metalness: number,
 ): { group: THREE.Group; material: THREE.MeshStandardMaterial } {
-  const material = makeMaterial(color);
+  const material = makeMaterial(color, roughness, metalness);
   const group = withShadows(BUILDERS[shapeKind](footprint, material)) as THREE.Group;
   return { group, material };
 }

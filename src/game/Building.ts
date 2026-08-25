@@ -35,7 +35,7 @@ export class Building implements Targetable {
     this.hp = config.maxHp;
 
     const role = BUILDING_ROLE_BY_ID[config.id];
-    const { group, material } = buildBuildingVisual(role, config.footprint, config.color);
+    const { group, material } = buildBuildingVisual(role, config.footprint, config.color, config.materialRoughness, config.materialMetalness);
     this.material = material;
     this.material.emissiveIntensity = prebuilt ? 0.35 : 0.1;
     this.material.transparent = !prebuilt;

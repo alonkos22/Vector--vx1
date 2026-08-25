@@ -4,6 +4,11 @@
  * -> despawn inputs, spawn output after channel time T". Adding another
  * faction's recipes is purely a new array here, never a change to
  * ConvergenceManager.
+ *
+ * The 2-input recipe per faction follows the exact fusion pairing named in
+ * the master prompt (e.g. "Tesla Archon + Nanite Weaver = Storm-Grid
+ * Colossus"); the 3x-basic-unit recipe keeps a new homebrew output name
+ * since only one fusion per faction was specified there.
  */
 export interface ConvergenceRecipe {
   id: string;
@@ -28,7 +33,7 @@ export const CONVERGENCE_BY_FACTION: Record<string, ConvergenceRecipe[]> = {
       id: 'hive-construct',
       name: 'Hive Construct',
       mechanicName: 'Synchronization',
-      inputs: { 'sentinel-drone': 3 },
+      inputs: { 'nexus-striker': 3 },
       outputUnitId: 'hive-construct',
       extraCoreEnergyCost: 30,
       channelTimeSec: 1.5,
@@ -36,11 +41,11 @@ export const CONVERGENCE_BY_FACTION: Record<string, ConvergenceRecipe[]> = {
       requiresBuildingRadius: 0,
     },
     {
-      id: 'vanguard-executioner',
-      name: 'Vanguard Executioner',
+      id: 'storm-grid-colossus',
+      name: 'Storm-Grid Colossus',
       mechanicName: 'Synchronization',
-      inputs: { 'phase-trooper': 2, 'arc-walker': 1 },
-      outputUnitId: 'vanguard-executioner',
+      inputs: { 'tesla-archon': 1, 'nanite-weaver': 1 },
+      outputUnitId: 'storm-grid-colossus',
       extraCoreEnergyCost: 40,
       channelTimeSec: 1.5,
       requiresBuildingId: null,
@@ -50,22 +55,22 @@ export const CONVERGENCE_BY_FACTION: Record<string, ConvergenceRecipe[]> = {
 
   pyroliths: [
     {
-      id: 'basalt-brute-converged',
-      name: 'Basalt Brute (Conglomerated)',
+      id: 'molten-behemoth',
+      name: 'Molten Behemoth',
       mechanicName: 'Conglomeration',
-      inputs: { 'ember-whelp': 3 },
-      outputUnitId: 'basalt-brute-converged',
+      inputs: { 'magma-imp': 3 },
+      outputUnitId: 'molten-behemoth',
       extraCoreEnergyCost: 35,
       channelTimeSec: 4,
       requiresBuildingId: null,
       requiresBuildingRadius: 0,
     },
     {
-      id: 'magma-colossus',
-      name: 'Magma Colossus',
+      id: 'obsidian-chimera',
+      name: 'Obsidian Chimera',
       mechanicName: 'Conglomeration',
-      inputs: { 'basalt-brute': 2, 'cinder-hurler': 1 },
-      outputUnitId: 'magma-colossus',
+      inputs: { 'magma-imp': 1, 'acid-drake': 1 },
+      outputUnitId: 'obsidian-chimera',
       extraCoreEnergyCost: 50,
       channelTimeSec: 4,
       requiresBuildingId: null,
@@ -75,22 +80,22 @@ export const CONVERGENCE_BY_FACTION: Record<string, ConvergenceRecipe[]> = {
 
   'solari-archons': [
     {
-      id: 'solar-acolyte-converged',
-      name: 'Solar Acolyte (Ascended)',
+      id: 'ascended-zealot',
+      name: 'Ascended Zealot',
       mechanicName: 'Ascension',
-      inputs: { 'lumen-wisp': 3 },
-      outputUnitId: 'solar-acolyte-converged',
+      inputs: { 'solar-zealot': 3 },
+      outputUnitId: 'ascended-zealot',
       extraCoreEnergyCost: 30,
       channelTimeSec: 2,
       requiresBuildingId: null,
       requiresBuildingRadius: 0,
     },
     {
-      id: 'radiant-ascendant',
-      name: 'Radiant Ascendant',
+      id: 'eclipse-titan',
+      name: 'Eclipse Titan',
       mechanicName: 'Ascension',
-      inputs: { 'solar-acolyte': 2, 'halo-seraph': 1 },
-      outputUnitId: 'radiant-ascendant',
+      inputs: { 'solar-zealot': 1, 'void-arbiter': 1 },
+      outputUnitId: 'eclipse-titan',
       extraCoreEnergyCost: 45,
       channelTimeSec: 2,
       requiresBuildingId: null,
@@ -100,22 +105,22 @@ export const CONVERGENCE_BY_FACTION: Record<string, ConvergenceRecipe[]> = {
 
   'frost-forged': [
     {
-      id: 'piston-crusher-converged',
-      name: 'Piston Crusher (Forge-Welded)',
+      id: 'forge-walker',
+      name: 'Forge Walker',
       mechanicName: 'Forge-Weld',
-      inputs: { 'frost-trooper': 3 },
-      outputUnitId: 'piston-crusher-converged',
+      inputs: { 'steam-scrapper': 3 },
+      outputUnitId: 'forge-walker',
       extraCoreEnergyCost: 35,
       channelTimeSec: 5,
       requiresBuildingId: null,
       requiresBuildingRadius: 0,
     },
     {
-      id: 'juggernaut-rig',
-      name: 'Juggernaut Rig',
+      id: 'thermal-shock-engine',
+      name: 'Thermal Shock Engine',
       mechanicName: 'Forge-Weld',
-      inputs: { 'piston-crusher': 2, 'ice-howitzer': 1 },
-      outputUnitId: 'juggernaut-rig',
+      inputs: { 'cryo-thrower-mech': 1, 'steam-scrapper': 1 },
+      outputUnitId: 'thermal-shock-engine',
       extraCoreEnergyCost: 50,
       channelTimeSec: 5,
       requiresBuildingId: null,

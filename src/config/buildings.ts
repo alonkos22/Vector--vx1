@@ -1,13 +1,19 @@
 /**
- * Per-faction building definitions. Costs/times are canon from the design
- * doc §2. Every faction defines exactly the same four canonical roles
- * (main structure, resource dropoff, basic production, heavy production) -
- * the only building types the engine actually implements (no defense
- * towers/research/teleport systems exist yet, so those doc buildings are
- * intentionally omitted for every faction, not just Cyber-Nexus). Engine
- * code (PlayerBase, AIController) addresses buildings by role, never by a
- * faction-specific id, so it never needs to know which faction it's
- * running.
+ * Per-faction building definitions. Every faction defines exactly the same
+ * four canonical roles (main structure, resource dropoff, basic production,
+ * heavy production) - the only building types the engine actually
+ * implements (no auto-attacking defense-tower/research/teleport systems
+ * exist yet). Engine code (PlayerBase, AIController) addresses buildings by
+ * role, never by a faction-specific id, so it never needs to know which
+ * faction it's running.
+ *
+ * Names/ids/colors follow the detailed per-faction building catalog
+ * (Nexus Core, Cyber-Forge, EMP Arc Turret, ...). Each faction's catalog
+ * lists three buildings (Command Center / Factory / Defense Tower) - since
+ * the engine has no tower-combat system, the "tower" entry is repurposed
+ * here as the heavyProduction role (its striking silhouette carries over,
+ * its auto-attack ability doesn't). resourceDropoff isn't in that catalog
+ * at all, so it keeps its original name/visual.
  */
 export type BuildingRole = 'main' | 'resourceDropoff' | 'basicProduction' | 'heavyProduction';
 export const BUILDING_ROLES: BuildingRole[] = ['main', 'resourceDropoff', 'basicProduction', 'heavyProduction'];
@@ -24,6 +30,9 @@ export interface BuildingConfig {
   visionRadius: number;
   maxHp: number;
   color: number;
+  /** Material family per the faction's visual style (chrome/basalt/gold/riveted-steel). */
+  materialRoughness: number;
+  materialMetalness: number;
   /** Unit ids this building can produce. Empty = no production. */
   produces: string[];
   /** Which resource harvesters deposit here, if any. */
@@ -33,8 +42,8 @@ export interface BuildingConfig {
 export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingConfig>> = {
   'cyber-nexus': {
     main: {
-      id: 'core-spire',
-      name: 'Core Spire',
+      id: 'nexus-core',
+      name: 'Nexus Core',
       costCoreEnergy: 0,
       costFactionResource: 400,
       buildTimeSec: 90,
@@ -42,6 +51,8 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 16,
       maxHp: 800,
       color: 0x9fd8ff,
+      materialRoughness: 0.15,
+      materialMetalness: 0.9,
       produces: ['flux-harvester'],
       dropoffResource: 'coreEnergy',
     },
@@ -55,12 +66,14 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 10,
       maxHp: 200,
       color: 0x2ea3ff,
+      materialRoughness: 0.15,
+      materialMetalness: 0.9,
       produces: [],
       dropoffResource: 'factionResource',
     },
     basicProduction: {
-      id: 'fabrication-node',
-      name: 'Fabrication Node',
+      id: 'cyber-forge',
+      name: 'Cyber-Forge',
       costCoreEnergy: 100,
       costFactionResource: 100,
       buildTimeSec: 35,
@@ -68,12 +81,14 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 10,
       maxHp: 250,
       color: 0x3fb0ff,
-      produces: ['sentinel-drone', 'phase-trooper'],
+      materialRoughness: 0.15,
+      materialMetalness: 0.9,
+      produces: ['nexus-striker', 'nanite-weaver'],
       dropoffResource: null,
     },
     heavyProduction: {
-      id: 'drone-foundry',
-      name: 'Drone Foundry',
+      id: 'emp-arc-turret',
+      name: 'EMP Arc Turret',
       costCoreEnergy: 150,
       costFactionResource: 150,
       buildTimeSec: 45,
@@ -81,15 +96,17 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 10,
       maxHp: 300,
       color: 0x1f7fcc,
-      produces: ['arc-walker'],
+      materialRoughness: 0.15,
+      materialMetalness: 0.9,
+      produces: ['tesla-archon'],
       dropoffResource: null,
     },
   },
 
   pyroliths: {
     main: {
-      id: 'magma-heart',
-      name: 'Magma Heart',
+      id: 'magma-hearth',
+      name: 'Magma Hearth',
       costCoreEnergy: 0,
       costFactionResource: 400,
       buildTimeSec: 90,
@@ -97,6 +114,8 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 15,
       maxHp: 900,
       color: 0xff6a1a,
+      materialRoughness: 0.9,
+      materialMetalness: 0.05,
       produces: ['cinder-grub'],
       dropoffResource: 'coreEnergy',
     },
@@ -110,12 +129,14 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 9,
       maxHp: 220,
       color: 0xff8c42,
+      materialRoughness: 0.9,
+      materialMetalness: 0.05,
       produces: [],
       dropoffResource: 'factionResource',
     },
     basicProduction: {
-      id: 'ash-spire',
-      name: 'Ash Spire',
+      id: 'spawning-pit',
+      name: 'Spawning Pit',
       costCoreEnergy: 100,
       costFactionResource: 100,
       buildTimeSec: 35,
@@ -123,12 +144,14 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 9,
       maxHp: 280,
       color: 0xcc4a10,
-      produces: ['ember-whelp', 'cinder-hurler'],
+      materialRoughness: 0.9,
+      materialMetalness: 0.05,
+      produces: ['magma-imp', 'ignis-priest'],
       dropoffResource: null,
     },
     heavyProduction: {
-      id: 'cinder-forge',
-      name: 'Cinder Forge',
+      id: 'volcanic-spire',
+      name: 'Volcanic Spire',
       costCoreEnergy: 150,
       costFactionResource: 150,
       buildTimeSec: 45,
@@ -136,15 +159,17 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 9,
       maxHp: 340,
       color: 0x8a2f10,
-      produces: ['basalt-brute'],
+      materialRoughness: 0.9,
+      materialMetalness: 0.05,
+      produces: ['acid-drake'],
       dropoffResource: null,
     },
   },
 
   'solari-archons': {
     main: {
-      id: 'sun-spire',
-      name: 'Sun Spire',
+      id: 'sanctum-of-light',
+      name: 'Sanctum of Light',
       costCoreEnergy: 0,
       costFactionResource: 400,
       buildTimeSec: 90,
@@ -152,6 +177,8 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 18,
       maxHp: 650,
       color: 0xf4c542,
+      materialRoughness: 0.25,
+      materialMetalness: 0.6,
       produces: [],
       dropoffResource: 'coreEnergy',
     },
@@ -165,12 +192,14 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 12,
       maxHp: 160,
       color: 0xffe08a,
+      materialRoughness: 0.25,
+      materialMetalness: 0.6,
       produces: [],
       dropoffResource: null,
     },
     basicProduction: {
-      id: 'halo-sanctum',
-      name: 'Halo Sanctum',
+      id: 'celestial-spire',
+      name: 'Celestial Spire',
       costCoreEnergy: 100,
       costFactionResource: 100,
       buildTimeSec: 35,
@@ -178,12 +207,14 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 12,
       maxHp: 200,
       color: 0xd9a834,
-      produces: ['lumen-wisp', 'solar-acolyte'],
+      materialRoughness: 0.25,
+      materialMetalness: 0.6,
+      produces: ['solar-zealot', 'astral-frost-scribe'],
       dropoffResource: null,
     },
     heavyProduction: {
-      id: 'prism-conclave',
-      name: 'Prism Conclave',
+      id: 'prism-obelisk',
+      name: 'Prism Obelisk',
       costCoreEnergy: 150,
       costFactionResource: 150,
       buildTimeSec: 45,
@@ -191,15 +222,17 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 12,
       maxHp: 230,
       color: 0x9b5de5,
-      produces: ['halo-seraph'],
+      materialRoughness: 0.25,
+      materialMetalness: 0.6,
+      produces: ['void-arbiter'],
       dropoffResource: null,
     },
   },
 
   'frost-forged': {
     main: {
-      id: 'foundry-bastion',
-      name: 'Foundry Bastion',
+      id: 'iron-foundry',
+      name: 'Iron Foundry',
       costCoreEnergy: 0,
       costFactionResource: 400,
       buildTimeSec: 90,
@@ -207,6 +240,8 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 15,
       maxHp: 950,
       color: 0xb5651d,
+      materialRoughness: 0.55,
+      materialMetalness: 0.55,
       produces: ['rustling'],
       dropoffResource: 'coreEnergy',
     },
@@ -220,12 +255,14 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 9,
       maxHp: 240,
       color: 0x8a4a17,
+      materialRoughness: 0.55,
+      materialMetalness: 0.55,
       produces: [],
       dropoffResource: 'factionResource',
     },
     basicProduction: {
-      id: 'assembly-yard',
-      name: 'Assembly Yard',
+      id: 'steam-works',
+      name: 'Steam Works',
       costCoreEnergy: 100,
       costFactionResource: 100,
       buildTimeSec: 35,
@@ -233,12 +270,14 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 9,
       maxHp: 320,
       color: 0x6f7a80,
-      produces: ['frost-trooper', 'piston-crusher'],
+      materialRoughness: 0.55,
+      materialMetalness: 0.55,
+      produces: ['steam-scrapper', 'cryo-thrower-mech'],
       dropoffResource: null,
     },
     heavyProduction: {
-      id: 'heavy-works',
-      name: 'Heavy Works',
+      id: 'mortar-bunker',
+      name: 'Mortar Bunker',
       costCoreEnergy: 150,
       costFactionResource: 150,
       buildTimeSec: 45,
@@ -246,7 +285,9 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
       visionRadius: 9,
       maxHp: 380,
       color: 0x4fd8e0,
-      produces: ['ice-howitzer'],
+      materialRoughness: 0.55,
+      materialMetalness: 0.55,
+      produces: ['boiler-juggernaut'],
       dropoffResource: null,
     },
   },
