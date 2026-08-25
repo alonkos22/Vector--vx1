@@ -45,7 +45,7 @@ working, testable increment. See commit history for progress.
 - [x] Milestone 2 — Cyber-Nexus home biome terrain + Core Zone placeholder
 - [x] Milestone 3 — Cyber-Nexus economy loop (harvester, resources, HUD)
 - [x] Milestone 4 — Selection, pathfinding, basic combat
-- [ ] Milestone 5 — Production queues
+- [x] Milestone 5 — Production queues
 - [ ] Milestone 6 — Convergence (fusion) system
 - [ ] Milestone 7 — Fog of war + basic AI opponent
 - [ ] Milestone 8 — Sun Proximity system + win/lose flow
