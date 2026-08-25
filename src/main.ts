@@ -7,18 +7,18 @@ import { BIOMES } from './config/biomes';
 import { FACTIONS } from './config/factions';
 import { CYBER_NEXUS_BUILDINGS } from './config/buildings';
 import { CYBER_NEXUS_UNITS } from './config/units';
-import { PlayerEconomy } from './game/Economy';
-import { ResourceNode, type ResourceType } from './game/ResourceNode';
-import { Building } from './game/Building';
-import { FluxHarvester } from './game/units/FluxHarvester';
+import { CYBER_NEXUS_CONVERGENCE } from './config/convergence';
+import { PlayerBase } from './game/PlayerBase';
 import { CombatUnit } from './game/units/CombatUnit';
 import { TrainingDummy } from './game/units/TrainingDummy';
 import { Unit } from './game/units/Unit';
+import type { Targetable } from './game/Targetable';
 import { pathGrid } from './game/Pathfinding';
 import { EffectManager } from './game/CombatVFX';
 import { SelectionManager } from './game/Selection';
 import { ConvergenceManager } from './game/Convergence';
-import { CYBER_NEXUS_CONVERGENCE } from './config/convergence';
+import { FogOfWar } from './game/FogOfWar';
+import { AIController } from './game/ai/AIController';
 import { HUD, type HUDPanelDef, type HUDPanelState } from './ui/HUD';
 
 function formatCost(costCoreEnergy: number, costFactionResource: number, buildTimeSec: number): string {
@@ -30,7 +30,8 @@ function formatCost(costCoreEnergy: number, costFactionResource: number, buildTi
 
 const MAP_HALF_EXTENT = 100;
 const FACTION = FACTIONS['cyber-nexus'];
-const BASE_POSITION = new THREE.Vector3(-55, 0, -55);
+const PLAYER_BASE_POSITION = new THREE.Vector3(-55, 0, -55);
+const AI_BASE_POSITION = new THREE.Vector3(55, 0, 55);
 const STARTING_HARVESTERS = 2;
 const STARTING_CORE_ENERGY = 150;
 
@@ -50,7 +51,7 @@ scene.fog = new THREE.Fog(0x0b0d10, 120, 260);
 const rtsCamera = new RTSCamera(window.innerWidth / window.innerHeight, {
   mapHalfExtent: MAP_HALF_EXTENT,
 });
-rtsCamera.target.copy(BASE_POSITION);
+rtsCamera.target.copy(PLAYER_BASE_POSITION);
 
 const input = new InputManager(renderer.domElement);
 
@@ -89,82 +90,48 @@ pathGrid.init(MAP_HALF_EXTENT, 2);
 pathGrid.markCircleBlocked(new THREE.Vector3(0, 0, 0), 9);
 
 // ---------------------------------------------------------------------------
-// Economy loop
+// Player + AI bases — identical economy/production/army systems (PlayerBase),
+// differing only in who drives them: UI clicks for the player, AIController's
+// heuristics for the AI.
 // ---------------------------------------------------------------------------
 
-const economy = new PlayerEconomy(STARTING_CORE_ENERGY, 0);
+const playerBase = new PlayerBase('player', scene, effects, PLAYER_BASE_POSITION, STARTING_CORE_ENERGY);
+const aiBase = new PlayerBase('ai', scene, effects, AI_BASE_POSITION, STARTING_CORE_ENERGY);
 
-const coreSpire = new Building(CYBER_NEXUS_BUILDINGS['core-spire'], BASE_POSITION, true);
-scene.add(coreSpire.mesh);
-pathGrid.markCircleBlocked(coreSpire.position, CYBER_NEXUS_BUILDINGS['core-spire'].footprint + 1);
-
-let fluxSiphon: Building | null = null;
-
-const resourceNodes: ResourceNode[] = [];
-function addNode(type: ResourceType, offsetX: number, offsetZ: number): void {
-  const pos = new THREE.Vector3(BASE_POSITION.x + offsetX, 0, BASE_POSITION.z + offsetZ);
-  const node = new ResourceNode(type, pos);
-  resourceNodes.push(node);
-  scene.add(node.mesh);
+// Core Energy veins + Data-Flux nodes native to the Cyber-Nexus metal-plains
+// home biome, mirrored 180° around each base (sign flips every offset).
+function addHomeResourceNodes(base: PlayerBase, sign: 1 | -1): void {
+  base.addResourceNode('coreEnergy', 14 * sign, -6 * sign);
+  base.addResourceNode('coreEnergy', -10 * sign, 14 * sign);
+  base.addResourceNode('coreEnergy', 26 * sign, 20 * sign);
+  base.addResourceNode('coreEnergy', 34 * sign, 30 * sign);
+  base.addResourceNode('factionResource', -18 * sign, -6 * sign);
+  base.addResourceNode('factionResource', -6 * sign, -20 * sign);
+  base.addResourceNode('factionResource', 10 * sign, -18 * sign);
+  base.addResourceNode('factionResource', -20 * sign, 10 * sign);
 }
+addHomeResourceNodes(playerBase, 1);
+addHomeResourceNodes(aiBase, -1);
 
-// Core Energy veins near the base (density increases toward the map center per §5;
-// this home cluster plus the ones scattered toward (0,0,0) sell that gradient).
-addNode('coreEnergy', 14, -6);
-addNode('coreEnergy', -10, 14);
-addNode('coreEnergy', 26, 20);
-addNode('coreEnergy', 34, 30);
-
-// Data-Flux nodes native to the Cyber-Nexus metal-plains home biome.
-addNode('factionResource', -18, -6);
-addNode('factionResource', -6, -20);
-addNode('factionResource', 10, -18);
-addNode('factionResource', -20, 10);
-
-function findNearestNode(type: ResourceType, from: THREE.Vector3): ResourceNode | null {
-  let best: ResourceNode | null = null;
-  let bestDist = Infinity;
-  for (const node of resourceNodes) {
-    if (node.type !== type || node.isDepleted()) continue;
-    const dist = node.position.distanceTo(from);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = node;
-    }
-  }
-  return best;
-}
-
-const harvesters: FluxHarvester[] = [];
-let assignedToEnergy = 0;
-let assignedToFlux = 0;
-
-function chooseResourceType(): ResourceType {
-  if (!fluxSiphon || !fluxSiphon.isComplete) return 'coreEnergy';
-  return assignedToEnergy <= assignedToFlux ? 'coreEnergy' : 'factionResource';
-}
-
-function spawnHarvester(position: THREE.Vector3): void {
-  const config = CYBER_NEXUS_UNITS['flux-harvester'];
-  const harvester = new FluxHarvester(position, config.moveSpeed, config.selectionRadius);
-  scene.add(harvester.mesh);
-  harvesters.push(harvester);
-
-  const type = chooseResourceType();
-  const dropoff = type === 'coreEnergy' ? coreSpire : fluxSiphon;
-  const node = findNearestNode(type, position);
-  if (node && dropoff) {
-    harvester.assign(node, dropoff);
-    if (type === 'coreEnergy') assignedToEnergy += 1;
-    else assignedToFlux += 1;
+function spawnStartingHarvesters(base: PlayerBase): void {
+  for (let i = 0; i < STARTING_HARVESTERS; i++) {
+    const angle = (i / STARTING_HARVESTERS) * Math.PI * 2;
+    const spawnPos = base.basePosition.clone().add(new THREE.Vector3(Math.cos(angle) * 5, 0, Math.sin(angle) * 5));
+    base.spawnHarvester(spawnPos);
   }
 }
+spawnStartingHarvesters(playerBase);
+spawnStartingHarvesters(aiBase);
 
-for (let i = 0; i < STARTING_HARVESTERS; i++) {
-  const angle = (i / STARTING_HARVESTERS) * Math.PI * 2;
-  const spawnPos = BASE_POSITION.clone().add(new THREE.Vector3(Math.cos(angle) * 5, 0, Math.sin(angle) * 5));
-  spawnHarvester(spawnPos);
-}
+const aiController = new AIController(aiBase, PLAYER_BASE_POSITION);
+
+// ---------------------------------------------------------------------------
+// Fog of war (player's view only — the AI sees the whole map, a standard
+// simplification for a scripted opponent).
+// ---------------------------------------------------------------------------
+
+const fogOfWar = new FogOfWar(MAP_HALF_EXTENT, 4);
+scene.add(fogOfWar.mesh);
 
 // ---------------------------------------------------------------------------
 // Building placement (click-to-place ghost preview), generalized across
@@ -175,9 +142,6 @@ for (let i = 0; i < STARTING_HARVESTERS; i++) {
 const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-let fabricationNode: Building | null = null;
-let droneFoundry: Building | null = null;
-
 function screenToGround(clientX: number, clientY: number): THREE.Vector3 | null {
   const ndc = new THREE.Vector2((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, rtsCamera.camera);
@@ -185,26 +149,12 @@ function screenToGround(clientX: number, clientY: number): THREE.Vector3 | null 
   return raycaster.ray.intersectPlane(groundPlane, point) ? point : null;
 }
 
-function getPlacedBuilding(buildingId: string): Building | null {
-  if (buildingId === 'flux-siphon') return fluxSiphon;
-  if (buildingId === 'fabrication-node') return fabricationNode;
-  if (buildingId === 'drone-foundry') return droneFoundry;
-  return null;
-}
-
-function setPlacedBuilding(buildingId: string, building: Building): void {
-  if (buildingId === 'flux-siphon') fluxSiphon = building;
-  else if (buildingId === 'fabrication-node') fabricationNode = building;
-  else if (buildingId === 'drone-foundry') droneFoundry = building;
-}
-
 let placementTarget: string | null = null;
 let ghostMesh: THREE.Mesh | null = null;
 
 function beginPlacement(buildingId: string): void {
   const config = CYBER_NEXUS_BUILDINGS[buildingId];
-  if (!config || getPlacedBuilding(buildingId) || placementTarget) return;
-  if (!economy.canAfford(config.costCoreEnergy, config.costFactionResource)) return;
+  if (!config || placementTarget || !playerBase.canAffordBuilding(buildingId)) return;
 
   placementTarget = buildingId;
   const geometry = new THREE.CylinderGeometry(config.footprint, config.footprint * 1.15, config.footprint * 1.6, 6);
@@ -226,16 +176,7 @@ function cancelPlacement(): void {
 
 function confirmPlacement(point: THREE.Vector3): void {
   if (!placementTarget) return;
-  const config = CYBER_NEXUS_BUILDINGS[placementTarget];
-  if (!economy.canAfford(config.costCoreEnergy, config.costFactionResource)) {
-    cancelPlacement();
-    return;
-  }
-  economy.spend(config.costCoreEnergy, config.costFactionResource);
-  const building = new Building(config, point, false);
-  scene.add(building.mesh);
-  pathGrid.markCircleBlocked(building.position, config.footprint + 1);
-  setPlacedBuilding(placementTarget, building);
+  playerBase.constructBuilding(placementTarget, point);
   cancelPlacement();
 }
 
@@ -259,17 +200,9 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// Combat units + placeholder training dummies
+// Neutral placeholder training dummies (still useful for isolated testing
+// alongside the real AI opponent).
 // ---------------------------------------------------------------------------
-
-const combatUnits: CombatUnit[] = [];
-
-function spawnCombatUnit(unitTypeId: string, position: THREE.Vector3): void {
-  const config = CYBER_NEXUS_UNITS[unitTypeId];
-  const unit = new CombatUnit(config, 'player', position, effects);
-  scene.add(unit.mesh);
-  combatUnits.push(unit);
-}
 
 const dummies: TrainingDummy[] = [];
 function spawnDummy(position: THREE.Vector3): void {
@@ -277,13 +210,13 @@ function spawnDummy(position: THREE.Vector3): void {
   scene.add(dummy.mesh);
   dummies.push(dummy);
 }
-spawnDummy(BASE_POSITION.clone().add(new THREE.Vector3(28, 0, 6)));
-spawnDummy(BASE_POSITION.clone().add(new THREE.Vector3(30, 0, -4)));
+spawnDummy(PLAYER_BASE_POSITION.clone().add(new THREE.Vector3(28, 0, 6)));
+spawnDummy(PLAYER_BASE_POSITION.clone().add(new THREE.Vector3(30, 0, -4)));
 
 // ---------------------------------------------------------------------------
-// Convergence (fusion), §3: a generic data-driven engine (ConvergenceManager)
-// consuming the CYBER_NEXUS_CONVERGENCE recipe table. Screen shake + a brief
-// hit-stop punctuate every completed fusion, per the "feel epic" build notes.
+// Convergence (fusion) — player only; the AI doesn't use Convergence this
+// milestone (a scoped limitation, not a missing system - AIController could
+// grow this later without any engine changes).
 // ---------------------------------------------------------------------------
 
 let hitStopRemaining = 0;
@@ -291,12 +224,8 @@ function triggerHitStop(durationSec: number): void {
   hitStopRemaining = Math.max(hitStopRemaining, durationSec);
 }
 
-function getAllBuildings(): Building[] {
-  return [coreSpire, fluxSiphon, fabricationNode, droneFoundry].filter((b): b is Building => b !== null);
-}
-
 const convergence = new ConvergenceManager(scene, effects, (outputUnitId, position) => {
-  spawnCombatUnit(outputUnitId, position);
+  playerBase.spawnCombatUnit(outputUnitId, position);
   rtsCamera.triggerShake(0.9, 0.3);
   triggerHitStop(0.06);
 });
@@ -320,14 +249,14 @@ function updateSelectionHUD(): void {
 
   const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
   const recipe = convergence.findMatchingRecipe(CYBER_NEXUS_CONVERGENCE, selectedCombat);
-  const canFuse = recipe && convergence.canAffordAndPlace(recipe, selectedCombat[0].position, economy, getAllBuildings());
+  const canFuse = recipe && convergence.canAffordAndPlace(recipe, selectedCombat[0].position, playerBase.economy, playerBase.allBuildings());
 
   if (recipe && canFuse) {
     hud.setConvergenceOption({
       label: `⚡ ${recipe.mechanicName}: Converge into ${recipe.name} (${recipe.extraCoreEnergyCost}⚡ · ${recipe.channelTimeSec}s)`,
       onClick: () => {
         const units = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
-        if (convergence.beginFusion(recipe, units, economy, getAllBuildings())) {
+        if (convergence.beginFusion(recipe, units, playerBase.economy, playerBase.allBuildings())) {
           for (const u of units) selection.deselect(u);
           updateSelectionHUD();
         }
@@ -341,19 +270,23 @@ function updateSelectionHUD(): void {
 const selection = new SelectionManager(
   renderer,
   rtsCamera.camera,
-  () => [...harvesters, ...combatUnits] as Unit[],
+  () => [...playerBase.harvesters, ...playerBase.combatUnits] as Unit[],
   updateSelectionHUD,
 );
 
-function pickDummyAt(clientX: number, clientY: number): TrainingDummy | null {
+function pickTargetAt(clientX: number, clientY: number): Targetable | null {
   const ndc = new THREE.Vector2((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, rtsCamera.camera);
-  const meshes = dummies.filter((d) => d.isAlive()).map((d) => d.mesh);
+  const meshes = [
+    ...dummies.filter((d) => d.isAlive()).map((d) => d.mesh),
+    ...aiBase.harvesters.map((h) => h.mesh),
+    ...aiBase.combatUnits.map((u) => u.mesh),
+  ];
   const hits = raycaster.intersectObjects(meshes, true);
   for (const hit of hits) {
     let obj: THREE.Object3D | null = hit.object;
     while (obj) {
-      const ref = obj.userData.dummyRef as TrainingDummy | undefined;
+      const ref = (obj.userData.dummyRef ?? obj.userData.unitRef) as Targetable | undefined;
       if (ref) return ref;
       obj = obj.parent;
     }
@@ -365,9 +298,9 @@ function issueOrderAt(clientX: number, clientY: number): void {
   const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
   if (selectedCombat.length === 0 || placementTarget) return;
 
-  const dummy = pickDummyAt(clientX, clientY);
-  if (dummy) {
-    for (const unit of selectedCombat) unit.setTarget(dummy);
+  const target = pickTargetAt(clientX, clientY);
+  if (target) {
+    for (const unit of selectedCombat) unit.setTarget(target);
     return;
   }
 
@@ -396,20 +329,7 @@ renderer.domElement.addEventListener('mouseup', (e) => {
 const PRODUCER_BUILDING_IDS = ['core-spire', 'flux-siphon', 'fabrication-node', 'drone-foundry'];
 
 function tryQueueUnit(buildingId: string, unitTypeId: string): void {
-  const building = buildingId === 'core-spire' ? coreSpire : getPlacedBuilding(buildingId);
-  if (!building || !building.isComplete || !building.canEnqueue()) return;
-
-  const config = CYBER_NEXUS_UNITS[unitTypeId];
-  if (!economy.canAfford(config.costCoreEnergy, config.costFactionResource)) return;
-  economy.spend(config.costCoreEnergy, config.costFactionResource);
-  building.enqueueProduction(unitTypeId, config.buildTimeSec);
-}
-
-function onProductionFinished(buildingPosition: THREE.Vector3, unitTypeId: string): void {
-  const jitter = new THREE.Vector3((Math.random() - 0.5) * 6, 0, (Math.random() - 0.5) * 6);
-  const spawnPos = buildingPosition.clone().add(jitter);
-  if (unitTypeId === 'flux-harvester') spawnHarvester(spawnPos);
-  else spawnCombatUnit(unitTypeId, spawnPos);
+  playerBase.tryQueueUnit(buildingId, unitTypeId);
 }
 
 const panelDefs: HUDPanelDef[] = PRODUCER_BUILDING_IDS.map((buildingId) => {
@@ -437,13 +357,13 @@ const hud = new HUD(app, panelDefs, {
 
 function buildPanelState(buildingId: string): HUDPanelState {
   const config = CYBER_NEXUS_BUILDINGS[buildingId];
-  const building = buildingId === 'core-spire' ? coreSpire : getPlacedBuilding(buildingId);
+  const building = playerBase.getPlacedBuilding(buildingId);
   const built = building?.isComplete ?? false;
 
   const unitAffordability: Record<string, boolean> = {};
   for (const unitId of config.produces) {
     const unitConfig = CYBER_NEXUS_UNITS[unitId];
-    unitAffordability[unitId] = economy.canAfford(unitConfig.costCoreEnergy, unitConfig.costFactionResource);
+    unitAffordability[unitId] = playerBase.economy.canAfford(unitConfig.costCoreEnergy, unitConfig.costFactionResource);
   }
 
   return {
@@ -451,7 +371,7 @@ function buildPanelState(buildingId: string): HUDPanelState {
     built,
     placementActive: placementTarget === buildingId,
     constructionProgress: building && !building.isComplete ? building.constructionProgress() : null,
-    canAffordBuilding: economy.canAfford(config.costCoreEnergy, config.costFactionResource),
+    canAffordBuilding: playerBase.economy.canAfford(config.costCoreEnergy, config.costFactionResource),
     queueLength: building?.queueLength() ?? 0,
     queueProgress: building?.productionProgress() ?? null,
     queueFull: building ? !building.canEnqueue() : false,
@@ -479,43 +399,43 @@ function animate(): void {
   terrain.update(rawDt);
   coreZone.update(rawDt);
 
-  coreSpire.update(dt);
-  fluxSiphon?.update(dt);
-  fabricationNode?.update(dt);
-  droneFoundry?.update(dt);
+  playerBase.updateEconomy(dt);
+  aiBase.updateEconomy(dt);
 
-  for (const building of [coreSpire, fluxSiphon, fabricationNode, droneFoundry]) {
-    if (!building) continue;
-    const finishedUnitId = building.collectFinishedProduction();
-    if (finishedUnitId) onProductionFinished(building.position, finishedUnitId);
-  }
+  playerBase.updateHarvesters(dt, rtsCamera.camera);
+  aiBase.updateHarvesters(dt, rtsCamera.camera);
 
-  for (const harvester of harvesters) harvester.update(dt, economy);
+  const targetables: Targetable[] = [
+    ...dummies,
+    ...playerBase.harvesters,
+    ...playerBase.combatUnits,
+    ...aiBase.harvesters,
+    ...aiBase.combatUnits,
+  ];
+  playerBase.updateCombatUnits(dt, rtsCamera.camera, targetables);
+  aiBase.updateCombatUnits(dt, rtsCamera.camera, targetables);
 
-  for (const combatUnit of combatUnits) combatUnit.update(dt, rtsCamera.camera, dummies);
-  for (let i = combatUnits.length - 1; i >= 0; i--) {
-    if (!combatUnits[i].isAlive()) {
-      scene.remove(combatUnits[i].mesh);
-      combatUnits.splice(i, 1);
-    }
-  }
   for (const dummy of dummies) dummy.update(dt, rtsCamera.camera);
   effects.update(rawDt);
   convergence.update(dt);
 
+  aiController.update(dt);
+
+  fogOfWar.update(playerBase.visionSources());
+  for (const harvester of aiBase.harvesters) harvester.mesh.visible = fogOfWar.isVisible(harvester.position);
+  for (const unit of aiBase.combatUnits) unit.mesh.visible = fogOfWar.isVisible(unit.position);
+  for (const building of aiBase.allBuildings()) building.mesh.visible = fogOfWar.isVisible(building.position);
+  for (const dummy of dummies) dummy.mesh.visible = fogOfWar.isVisible(dummy.position);
+
   selection.prune();
   updateSelectionHUD();
 
-  const supplyUsed =
-    harvesters.length * CYBER_NEXUS_UNITS['flux-harvester'].supply +
-    combatUnits.reduce((sum, u) => sum + (CYBER_NEXUS_UNITS[u.unitTypeId]?.supply ?? 0), 0);
-
   hud.update({
-    coreEnergy: economy.coreEnergy,
-    factionResource: economy.factionResource,
+    coreEnergy: playerBase.economy.coreEnergy,
+    factionResource: playerBase.economy.factionResource,
     factionResourceLabel: FACTION.factionResourceName,
-    unitCount: harvesters.length + combatUnits.length,
-    supplyUsed,
+    unitCount: playerBase.harvesters.length + playerBase.combatUnits.length,
+    supplyUsed: playerBase.supplyUsed(),
     panels: PRODUCER_BUILDING_IDS.map(buildPanelState),
   });
 

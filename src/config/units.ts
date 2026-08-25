@@ -23,9 +23,10 @@ export interface UnitConfig {
   costFactionResource: number;
   supply: number;
   buildTimeSec: number;
-  /** Engine-only movement/selection stats, not part of the design doc's cost tables. */
+  /** Engine-only movement/selection/vision stats, not part of the design doc's cost tables. */
   moveSpeed: number;
   selectionRadius: number;
+  visionRadius: number;
   color: number;
   /** Present only on combat-capable units (economy units like the harvester omit this). */
   combat?: CombatStats;
@@ -42,6 +43,7 @@ export const CYBER_NEXUS_UNITS: Record<string, UnitConfig> = {
     buildTimeSec: 9,
     moveSpeed: 6,
     selectionRadius: 0.9,
+    visionRadius: 9,
     color: 0x4fc3ff,
   },
   'sentinel-drone': {
@@ -54,6 +56,7 @@ export const CYBER_NEXUS_UNITS: Record<string, UnitConfig> = {
     buildTimeSec: 8,
     moveSpeed: 7,
     selectionRadius: 0.8,
+    visionRadius: 10,
     color: 0x4fc3ff,
     combat: { hp: 40, damage: 4, attackRange: 8, attackCooldown: 0.6, windupTime: 0.1, healthBarYOffset: 2.0 },
   },
@@ -67,6 +70,7 @@ export const CYBER_NEXUS_UNITS: Record<string, UnitConfig> = {
     buildTimeSec: 14,
     moveSpeed: 6,
     selectionRadius: 0.7,
+    visionRadius: 8,
     color: 0x6fd2ff,
     combat: { hp: 80, damage: 12, attackRange: 1.8, attackCooldown: 1.0, windupTime: 0.15, healthBarYOffset: 2.1 },
   },
@@ -80,6 +84,7 @@ export const CYBER_NEXUS_UNITS: Record<string, UnitConfig> = {
     buildTimeSec: 22,
     moveSpeed: 5,
     selectionRadius: 1.1,
+    visionRadius: 12,
     color: 0x2ea3ff,
     combat: { hp: 140, damage: 20, attackRange: 10, attackCooldown: 1.3, windupTime: 0.2, healthBarYOffset: 2.7 },
   },
@@ -94,6 +99,7 @@ export const CYBER_NEXUS_UNITS: Record<string, UnitConfig> = {
     buildTimeSec: 0,
     moveSpeed: 6,
     selectionRadius: 1.3,
+    visionRadius: 12,
     color: 0x4fc3ff,
     combat: { hp: 150, damage: 6, attackRange: 10, attackCooldown: 0.6, windupTime: 0.1, healthBarYOffset: 2.6, multiTargetCount: 4 },
   },
@@ -107,6 +113,7 @@ export const CYBER_NEXUS_UNITS: Record<string, UnitConfig> = {
     buildTimeSec: 0,
     moveSpeed: 5.5,
     selectionRadius: 1.2,
+    visionRadius: 10,
     color: 0x2ea3ff,
     combat: { hp: 260, damage: 30, attackRange: 3.6, attackCooldown: 1.0, windupTime: 0.15, healthBarYOffset: 2.8 },
   },

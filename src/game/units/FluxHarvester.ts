@@ -3,22 +3,29 @@ import { Unit } from './Unit';
 import type { ResourceNode } from '../ResourceNode';
 import type { Building } from '../Building';
 import type { PlayerEconomy } from '../Economy';
+import type { Targetable } from '../Targetable';
+import { HealthBar } from '../HealthBar';
 
 type HarvesterState = 'toNode' | 'harvesting' | 'toDropoff' | 'depositing' | 'idle';
 
 const HARVEST_AMOUNT_PER_TRIP = 10;
 const HARVEST_TIME_SEC = 1.5;
 const DEPOSIT_TIME_SEC = 0.4;
+const MAX_HP = 25;
 
-/** Autonomous economy unit: loops resource-node -> dropoff-building -> resource-node. */
-export class FluxHarvester extends Unit {
+/** Autonomous economy unit: loops resource-node -> dropoff-building -> resource-node. Harassable (low HP, no attack of its own). */
+export class FluxHarvester extends Unit implements Targetable {
+  maxHp = MAX_HP;
+  hp = MAX_HP;
+
+  private readonly healthBar: HealthBar;
   private state: HarvesterState = 'idle';
   private stateTimer = 0;
   private carrying = 0;
   private node: ResourceNode | null = null;
   private dropoff: Building | null = null;
 
-  constructor(position: THREE.Vector3, moveSpeed: number, selectionRadius: number) {
+  constructor(ownerId: string, position: THREE.Vector3, moveSpeed: number, selectionRadius: number) {
     const geometry = new THREE.CapsuleGeometry(0.5, 0.8, 4, 8);
     const material = new THREE.MeshStandardMaterial({
       color: 0x4fc3ff,
@@ -30,7 +37,22 @@ export class FluxHarvester extends Unit {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
     mesh.position.y = 0.9;
-    super('flux-harvester', 'player', mesh, position, moveSpeed, selectionRadius);
+    super('flux-harvester', ownerId, mesh, position, moveSpeed, selectionRadius);
+
+    this.healthBar = new HealthBar(1.7);
+    this.mesh.add(this.healthBar.group);
+    this.healthBar.update(1);
+  }
+
+  isAlive(): boolean {
+    return this.hp > 0;
+  }
+
+  takeDamage(amount: number): void {
+    if (!this.isAlive()) return;
+    this.hp = Math.max(0, this.hp - amount);
+    this.healthBar.update(this.hp / this.maxHp);
+    if (this.hp <= 0) this.destroy();
   }
 
   /** (Re)assigns this harvester to a node/dropoff pair and starts the gather loop. */
@@ -45,7 +67,9 @@ export class FluxHarvester extends Unit {
     return this.node?.type ?? null;
   }
 
-  update(dt: number, economy: PlayerEconomy): void {
+  update(dt: number, economy: PlayerEconomy, camera: THREE.Camera): void {
+    if (!this.isAlive()) return;
+
     const arrived = this.updateMovement(dt);
 
     switch (this.state) {
@@ -86,5 +110,8 @@ export class FluxHarvester extends Unit {
       case 'idle':
         break;
     }
+
+    this.healthBar.setForcedVisible(this.selected);
+    this.healthBar.faceCamera(camera);
   }
 }
