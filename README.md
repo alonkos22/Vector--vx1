@@ -42,7 +42,7 @@ working, testable increment. See commit history for progress.
 
 - [x] Milestone 1 — Project scaffold, isometric RTS camera (pan/zoom/rotate)
       over a flat placeholder ground plane
-- [ ] Milestone 2 — Cyber-Nexus home biome terrain + Core Zone placeholder
+- [x] Milestone 2 — Cyber-Nexus home biome terrain + Core Zone placeholder
 - [ ] Milestone 3 — Cyber-Nexus economy loop (harvester, resources, HUD)
 - [ ] Milestone 4 — Selection, pathfinding, basic combat
 - [ ] Milestone 5 — Production queues
