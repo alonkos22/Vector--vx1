@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BUILDING_ROLE_BY_ID, type BuildingConfig } from '../config/buildings';
+import { BUILDING_FUSION_ROLE_BY_ID } from '../config/buildingFusion';
 import type { Targetable } from './Targetable';
 import { HealthBar } from './HealthBar';
 import { buildBuildingVisual, BUILDING_TOP_HEIGHT_FACTOR } from './buildingVisuals';
@@ -36,7 +37,7 @@ export class Building implements Targetable {
     this.maxHp = config.maxHp;
     this.hp = config.maxHp;
 
-    const role = BUILDING_ROLE_BY_ID[config.id];
+    const role = BUILDING_ROLE_BY_ID[config.id] ?? BUILDING_FUSION_ROLE_BY_ID[config.id];
     const { group, material } = buildBuildingVisual(role, config.footprint, config.color, config.materialRoughness, config.materialMetalness);
     this.material = material;
     this.material.emissiveIntensity = prebuilt ? 0.35 : 0.1;

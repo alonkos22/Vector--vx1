@@ -5,9 +5,10 @@ import { BiomeTerrain } from './game/BiomeTerrain';
 import { CoreZone } from './game/CoreZone';
 import { BIOMES } from './config/biomes';
 import { FACTIONS } from './config/factions';
-import { CYBER_NEXUS_BUILDINGS } from './config/buildings';
+import { BUILDINGS_BY_FACTION, BUILDING_ROLES, type BuildingRole, type BuildingConfig } from './config/buildings';
 import { CYBER_NEXUS_UNITS } from './config/units';
 import { CYBER_NEXUS_CONVERGENCE } from './config/convergence';
+import { BUILDING_FUSION_BY_FACTION } from './config/buildingFusion';
 import { PlayerBase } from './game/PlayerBase';
 import { CombatUnit } from './game/units/CombatUnit';
 import { TrainingDummy } from './game/units/TrainingDummy';
@@ -22,7 +23,7 @@ import { AIController } from './game/ai/AIController';
 import { SunProximity, type SunProximityStage } from './game/SunProximity';
 import { CoreEnergyWave } from './game/hazards/CoreEnergyWave';
 import { buildRallyFlag } from './game/RallyFlag';
-import { HUD, type HUDPanelDef, type HUDPanelState } from './ui/HUD';
+import { HUD, type HUDPanelState } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
 
 function formatCost(costCoreEnergy: number, costFactionResource: number, buildTimeSec: number): string {
@@ -212,14 +213,21 @@ function screenToGround(clientX: number, clientY: number): THREE.Vector3 | null 
   return raycaster.ray.intersectPlane(groundPlane, point) ? point : null;
 }
 
-let placementTarget: string | null = null;
+const PLAYER_BUILDINGS = BUILDINGS_BY_FACTION[PLAYER_FACTION_ID];
+
+/** The static default config for a role (used for cost/color before the building exists), or the live one once built — reads the actual building's config so a post-fusion role reflects its merged identity. */
+function currentBuildingConfig(role: BuildingRole): BuildingConfig {
+  return playerBase.getBuildingByRole(role)?.config ?? PLAYER_BUILDINGS[role];
+}
+
+let placementTarget: BuildingRole | null = null;
 let ghostMesh: THREE.Mesh | null = null;
 
-function beginPlacement(buildingId: string): void {
-  const config = CYBER_NEXUS_BUILDINGS[buildingId];
-  if (!config || placementTarget || !playerBase.canAffordBuilding(buildingId)) return;
+function beginPlacement(role: BuildingRole): void {
+  const config = PLAYER_BUILDINGS[role];
+  if (placementTarget || !playerBase.canAffordBuilding(role)) return;
 
-  placementTarget = buildingId;
+  placementTarget = role;
   const geometry = new THREE.CylinderGeometry(config.footprint, config.footprint * 1.15, config.footprint * 1.6, 6);
   const material = new THREE.MeshBasicMaterial({ color: config.color, transparent: true, opacity: 0.4 });
   ghostMesh = new THREE.Mesh(geometry, material);
@@ -243,13 +251,13 @@ function confirmPlacement(point: THREE.Vector3): void {
   cancelPlacement();
 }
 
-let rallyTarget: string | null = null;
+let rallyTarget: BuildingRole | null = null;
 let rallyGhost: THREE.Group | null = null;
 
-function beginRallySet(buildingId: string): void {
-  if (placementTarget || rallyTarget === buildingId) return;
+function beginRallySet(role: BuildingRole): void {
+  if (placementTarget || rallyTarget === role) return;
   cancelRally();
-  rallyTarget = buildingId;
+  rallyTarget = role;
   rallyGhost = buildRallyFlag();
   scene.add(rallyGhost);
   hud.setStatus('Click the ground to set the rally point (Esc to cancel)');
@@ -270,8 +278,12 @@ function confirmRally(point: THREE.Vector3): void {
   cancelRally();
 }
 
-function clearRallyPoint(buildingId: string): void {
-  playerBase.setRallyPoint(buildingId, null);
+function clearRallyPoint(role: BuildingRole): void {
+  playerBase.setRallyPoint(role, null);
+}
+
+function mergeBuildings(): void {
+  playerBase.beginBuildingFusion();
 }
 
 renderer.domElement.addEventListener('mousemove', (e) => {
@@ -412,16 +424,33 @@ function issueOrderAt(clientX: number, clientY: number): void {
 
   const point = screenToGround(clientX, clientY);
   if (!point) return;
-  const spread = Math.min(1.2 * selectedCombat.length, 4);
+  const offsets = computeFormationOffsets(selectedCombat.length);
   selectedCombat.forEach((unit, i) => {
     unit.setTarget(null);
-    const angle = (i / selectedCombat.length) * Math.PI * 2;
-    const offset =
-      selectedCombat.length > 1
-        ? new THREE.Vector3(Math.cos(angle) * spread, 0, Math.sin(angle) * spread)
-        : new THREE.Vector3();
-    unit.moveTo(point.clone().add(offset));
+    unit.moveTo(point.clone().add(offsets[i]));
   });
+}
+
+/**
+ * Grid formation centered on the order point, one slot per unit — scales
+ * with army size in both dimensions (unlike a single ring of fixed max
+ * radius, which crowds a large army into the same cramped space a handful
+ * of units would use).
+ */
+function computeFormationOffsets(count: number): THREE.Vector3[] {
+  if (count <= 1) return [new THREE.Vector3()];
+  const spacing = 2.4;
+  const cols = Math.ceil(Math.sqrt(count));
+  const rows = Math.ceil(count / cols);
+  const offsets: THREE.Vector3[] = [];
+  for (let i = 0; i < count; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = (col - (cols - 1) / 2) * spacing;
+    const z = (row - (rows - 1) / 2) * spacing;
+    offsets.push(new THREE.Vector3(x, 0, z));
+  }
+  return offsets;
 }
 
 /** Touch has no right-click, so a tap does double duty: select on a friendly unit, otherwise move/attack (issueOrderAt) — but only when something is already selected, so an empty-handed tap still just (de)selects normally. */
@@ -442,64 +471,59 @@ renderer.domElement.addEventListener('mouseup', (e) => {
 // HUD + production queues
 // ---------------------------------------------------------------------------
 
-const PRODUCER_BUILDING_IDS = ['nexus-core', 'flux-siphon', 'cyber-forge', 'emp-arc-turret'];
-
-function tryQueueUnit(buildingId: string, unitTypeId: string): void {
-  playerBase.tryQueueUnit(buildingId, unitTypeId);
+function tryQueueUnit(role: BuildingRole, unitTypeId: string): void {
+  playerBase.tryQueueUnit(role, unitTypeId);
 }
 
-const panelDefs: HUDPanelDef[] = PRODUCER_BUILDING_IDS.map((buildingId) => {
-  const config = CYBER_NEXUS_BUILDINGS[buildingId];
-  return {
-    buildingId,
-    buildingName: config.name,
-    prebuilt: buildingId === 'nexus-core',
-    buildCostLabel: formatCost(config.costCoreEnergy, config.costFactionResource, config.buildTimeSec),
-    units: config.produces.map((unitId) => {
-      const unitConfig = CYBER_NEXUS_UNITS[unitId];
-      return {
-        unitId,
-        name: unitConfig.name,
-        costLabel: formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec),
-      };
-    }),
-  };
-});
-
-const hud = new HUD(app, panelDefs, {
+const hud = new HUD(app, BUILDING_ROLES, {
   onBeginPlaceBuilding: beginPlacement,
   onQueueUnit: tryQueueUnit,
   onSetRallyPoint: beginRallySet,
   onClearRallyPoint: clearRallyPoint,
+  onMergeBuildings: mergeBuildings,
 });
 
 const minimap = new Minimap(app, (worldX, worldZ) => {
   rtsCamera.target.set(worldX, 0, worldZ);
 });
 
-function buildPanelState(buildingId: string): HUDPanelState {
-  const config = CYBER_NEXUS_BUILDINGS[buildingId];
-  const building = playerBase.getPlacedBuilding(buildingId);
+function buildPanelState(role: BuildingRole): HUDPanelState {
+  const config = currentBuildingConfig(role);
+  const building = playerBase.getBuildingByRole(role);
   const built = building?.isComplete ?? false;
 
+  const units = config.produces.map((unitId) => {
+    const unitConfig = CYBER_NEXUS_UNITS[unitId];
+    return { unitId, name: unitConfig.name, costLabel: formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec) };
+  });
   const unitAffordability: Record<string, boolean> = {};
   for (const unitId of config.produces) {
     const unitConfig = CYBER_NEXUS_UNITS[unitId];
     unitAffordability[unitId] = playerBase.economy.canAfford(unitConfig.costCoreEnergy, unitConfig.costFactionResource);
   }
 
+  const fusionRecipe = role === 'heavyProduction' ? BUILDING_FUSION_BY_FACTION[PLAYER_FACTION_ID] : null;
+  const showMergeOption = !!fusionRecipe && playerBase.canFuseBuildings();
+
   return {
-    buildingId,
+    role,
+    buildingName: config.name,
+    prebuilt: role === 'main',
     built,
-    placementActive: placementTarget === buildingId,
+    placementActive: placementTarget === role,
     constructionProgress: building && !building.isComplete ? building.constructionProgress() : null,
+    buildCostLabel: formatCost(config.costCoreEnergy, config.costFactionResource, config.buildTimeSec),
     canAffordBuilding: playerBase.economy.canAfford(config.costCoreEnergy, config.costFactionResource),
+    units,
+    unitAffordability,
     queueLength: building?.queueLength() ?? 0,
     queueProgress: building?.productionProgress() ?? null,
     queueFull: building ? !building.canEnqueue() : false,
-    unitAffordability,
-    hasRallyPoint: building?.rallyPoint !== null && building?.rallyPoint !== undefined,
-    rallyArmed: rallyTarget === buildingId,
+    hasRallyPoint: !!building?.rallyPoint,
+    rallyArmed: rallyTarget === role,
+    showMergeOption,
+    mergeCostLabel: fusionRecipe ? formatCost(fusionRecipe.extraCoreEnergyCost, fusionRecipe.extraFactionResourceCost, fusionRecipe.buildTimeSec) : '',
+    canAffordMerge: showMergeOption,
   };
 }
 
@@ -622,7 +646,7 @@ function animate(): void {
       factionResourceLabel: FACTION.factionResourceName,
       unitCount: playerBase.harvesters.length + playerBase.combatUnits.length,
       supplyUsed: playerBase.supplyUsed(),
-      panels: PRODUCER_BUILDING_IDS.map(buildPanelState),
+      panels: BUILDING_ROLES.map(buildPanelState),
     });
 
     if (aiBase.isDefeated()) showMatchEndScreen(true);

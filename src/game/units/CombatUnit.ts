@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Unit } from './Unit';
+import { Unit, approachAngle, TURN_RATE_RAD_PER_SEC } from './Unit';
 import type { UnitConfig } from '../../config/units';
 import type { AttackVfxStyle } from '../../config/factions';
 import type { Targetable } from '../Targetable';
@@ -111,7 +111,7 @@ export class CombatUnit extends Unit implements Targetable {
         this.updateMovement(dt);
       } else {
         this.stopMoving();
-        this.faceTarget(this.target.position);
+        this.faceTarget(this.target.position, dt);
         this.tickAttack(dt);
       }
     } else {
@@ -122,10 +122,13 @@ export class CombatUnit extends Unit implements Targetable {
     this.healthBar.faceCamera(camera);
   }
 
-  private faceTarget(targetPos: THREE.Vector3): void {
+  private faceTarget(targetPos: THREE.Vector3, dt: number): void {
     const dx = targetPos.x - this.position.x;
     const dz = targetPos.z - this.position.z;
-    if (Math.hypot(dx, dz) > 0.001) this.mesh.rotation.y = Math.atan2(dx, dz);
+    if (Math.hypot(dx, dz) > 0.001) {
+      const targetAngle = Math.atan2(dx, dz);
+      this.mesh.rotation.y = approachAngle(this.mesh.rotation.y, targetAngle, TURN_RATE_RAD_PER_SEC * dt);
+    }
   }
 
   private tickAttack(dt: number): void {

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BUILDINGS_BY_FACTION, BUILDING_ROLES, type BuildingConfig, type BuildingRole } from '../config/buildings';
+import { BUILDING_FUSION_BY_FACTION } from '../config/buildingFusion';
 import { UNITS_BY_FACTION, type UnitConfig } from '../config/units';
 import { FACTIONS, type FactionConfig } from '../config/factions';
 import { PlayerEconomy } from './Economy';
@@ -220,6 +221,61 @@ export class PlayerBase {
     } else {
       this.spawnHarvester(spawnPos);
     }
+  }
+
+  /** Whether basicProduction + heavyProduction are both complete and the fusion cost is affordable — the merge button's enabled state. */
+  canFuseBuildings(): boolean {
+    const recipe = BUILDING_FUSION_BY_FACTION[this.factionId];
+    if (!recipe) return false;
+    const basic = this.getBuildingByRole('basicProduction');
+    const heavy = this.getBuildingByRole('heavyProduction');
+    if (!basic?.isComplete || !heavy?.isComplete) return false;
+    return this.economy.canAfford(recipe.extraCoreEnergyCost, recipe.extraFactionResourceCost);
+  }
+
+  /**
+   * Consumes the basicProduction + heavyProduction buildings and constructs
+   * one upgraded building (producing everything both parents did) at the
+   * heavyProduction spot, animated via the same construction-progress system
+   * every other building uses. The basicProduction plot is freed for
+   * rebuilding; per the engine's existing behavior for any destroyed
+   * building, its pathfinding-blocked tile is not reclaimed.
+   */
+  beginBuildingFusion(): boolean {
+    if (!this.canFuseBuildings()) return false;
+    const recipe = BUILDING_FUSION_BY_FACTION[this.factionId];
+    const basic = this.buildingsByRole.basicProduction!;
+    const heavy = this.buildingsByRole.heavyProduction!;
+
+    this.economy.spend(recipe.extraCoreEnergyCost, recipe.extraFactionResourceCost);
+
+    const fusedPosition = heavy.position.clone();
+    this.scene.remove(basic.mesh);
+    this.scene.remove(heavy.mesh);
+    this.effects.spawnBuildingDestroyed(basic.position, basic.config.footprint);
+    this.effects.spawnBuildingDestroyed(heavy.position, heavy.config.footprint);
+    delete this.buildingsByRole.basicProduction;
+
+    const fusedConfig: BuildingConfig = {
+      id: recipe.id,
+      name: recipe.name,
+      costCoreEnergy: 0,
+      costFactionResource: 0,
+      buildTimeSec: recipe.buildTimeSec,
+      footprint: recipe.footprint,
+      visionRadius: recipe.visionRadius,
+      maxHp: recipe.maxHp,
+      color: recipe.color,
+      materialRoughness: recipe.materialRoughness,
+      materialMetalness: recipe.materialMetalness,
+      produces: recipe.produces,
+      dropoffResource: null,
+    };
+    const fused = new Building(fusedConfig, this.ownerId, fusedPosition, false);
+    this.scene.add(fused.mesh);
+    pathGrid.markCircleBlocked(fused.position, fusedConfig.footprint + 1);
+    this.buildingsByRole.heavyProduction = fused;
+    return true;
   }
 
   allBuildings(): Building[] {

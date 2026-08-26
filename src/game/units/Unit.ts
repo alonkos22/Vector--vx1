@@ -4,6 +4,16 @@ import { registerUnit, unregisterUnit, allUnits } from './UnitRegistry';
 
 let nextUnitId = 1;
 
+/** Max turn rate in radians/sec — units rotate toward their facing over time instead of snapping instantly, for a less robotic feel. */
+export const TURN_RATE_RAD_PER_SEC = 10;
+
+/** Rotates `current` toward `target` by at most `maxDelta` radians, taking the shorter way around the circle. */
+export function approachAngle(current: number, target: number, maxDelta: number): number {
+  let diff = ((target - current + Math.PI) % (Math.PI * 2)) - Math.PI;
+  if (diff < -Math.PI) diff += Math.PI * 2;
+  return current + THREE.MathUtils.clamp(diff, -maxDelta, maxDelta);
+}
+
 function buildSelectionRing(radius: number): THREE.Mesh {
   const geometry = new THREE.RingGeometry(radius * 0.85, radius, 24);
   geometry.rotateX(-Math.PI / 2);
@@ -86,28 +96,8 @@ export abstract class Unit {
     unregisterUnit(this);
   }
 
-  /** Advances along the current path with separation steering. Returns true the frame the final waypoint is reached. */
-  protected updateMovement(dt: number): boolean {
-    if (this.path.length === 0) return false;
-
-    const waypoint = this.path[this.waypointIndex];
-    const toWaypointX = waypoint.x - this.position.x;
-    const toWaypointZ = waypoint.z - this.position.z;
-    const distance = Math.hypot(toWaypointX, toWaypointZ);
-    const step = this.moveSpeed * dt;
-    const isFinalWaypoint = this.waypointIndex === this.path.length - 1;
-
-    if (distance <= step && isFinalWaypoint) {
-      this.position.x = waypoint.x;
-      this.position.z = waypoint.z;
-      this.mesh.position.copy(this.position);
-      this.path = [];
-      this.waypointIndex = 0;
-      return true;
-    }
-
-    const desired = distance > 0.0001 ? new THREE.Vector3(toWaypointX / distance, 0, toWaypointZ / distance) : new THREE.Vector3();
-
+  /** Local separation steering against every other registered unit — run even when idle so a crowd of stopped units gently un-stacks instead of staying permanently overlapped. */
+  private computeSeparation(): THREE.Vector3 {
     const separation = new THREE.Vector3();
     for (const other of allUnits) {
       if (other === this) continue;
@@ -121,16 +111,53 @@ export abstract class Unit {
       }
     }
     if (separation.lengthSq() > 0.0001) separation.normalize().multiplyScalar(0.6);
+    return separation;
+  }
+
+  /** Advances along the current path with separation steering. Returns true the frame the final waypoint is reached. */
+  protected updateMovement(dt: number): boolean {
+    const hasPath = this.path.length > 0;
+    let desired = new THREE.Vector3();
+    let distance = 0;
+    let step = 0;
+
+    if (hasPath) {
+      const waypoint = this.path[this.waypointIndex];
+      const toWaypointX = waypoint.x - this.position.x;
+      const toWaypointZ = waypoint.z - this.position.z;
+      distance = Math.hypot(toWaypointX, toWaypointZ);
+      step = this.moveSpeed * dt;
+      const isFinalWaypoint = this.waypointIndex === this.path.length - 1;
+
+      if (distance <= step && isFinalWaypoint) {
+        this.position.x = waypoint.x;
+        this.position.z = waypoint.z;
+        this.mesh.position.copy(this.position);
+        this.path = [];
+        this.waypointIndex = 0;
+        return true;
+      }
+      desired = distance > 0.0001 ? new THREE.Vector3(toWaypointX / distance, 0, toWaypointZ / distance) : new THREE.Vector3();
+    }
+
+    const separation = this.computeSeparation();
+    if (!hasPath && separation.lengthSq() < 0.0001) return false;
 
     const move = desired.add(separation);
     if (move.lengthSq() > 0.0001) move.normalize();
 
-    this.position.x += move.x * step;
-    this.position.z += move.z * step;
+    // Idle units only get a gentle un-stack nudge, not a full move-speed step, so they don't visibly "walk" without an order.
+    const appliedStep = hasPath ? step : this.moveSpeed * dt * 0.5;
+    this.position.x += move.x * appliedStep;
+    this.position.z += move.z * appliedStep;
     this.mesh.position.copy(this.position);
-    if (move.lengthSq() > 0.0001) this.mesh.rotation.y = Math.atan2(move.x, move.z);
 
-    if (distance <= step) {
+    if (move.lengthSq() > 0.0001) {
+      const targetAngle = Math.atan2(move.x, move.z);
+      this.mesh.rotation.y = approachAngle(this.mesh.rotation.y, targetAngle, TURN_RATE_RAD_PER_SEC * dt);
+    }
+
+    if (hasPath && distance <= step) {
       this.waypointIndex++;
       if (this.waypointIndex >= this.path.length) {
         this.path = [];

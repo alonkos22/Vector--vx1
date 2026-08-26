@@ -1,42 +1,38 @@
+import type { BuildingRole } from '../config/buildings';
+
 export interface HUDUnitDef {
   unitId: string;
   name: string;
   costLabel: string;
 }
 
-export interface HUDPanelDef {
-  buildingId: string;
-  buildingName: string;
-  /** Prebuilt buildings (Core Spire) never show a "Build" button — they exist from the start. */
-  prebuilt: boolean;
-  buildCostLabel: string;
-  units: HUDUnitDef[];
-}
-
 export interface HUDCallbacks {
-  onBeginPlaceBuilding: (buildingId: string) => void;
-  onQueueUnit: (buildingId: string, unitId: string) => void;
-  /** Arms rally-point placement for this building; the next ground click sets it. */
-  onSetRallyPoint: (buildingId: string) => void;
-  onClearRallyPoint: (buildingId: string) => void;
+  onBeginPlaceBuilding: (role: BuildingRole) => void;
+  onQueueUnit: (role: BuildingRole, unitId: string) => void;
+  onSetRallyPoint: (role: BuildingRole) => void;
+  onClearRallyPoint: (role: BuildingRole) => void;
+  onMergeBuildings: () => void;
 }
 
 export interface HUDPanelState {
-  buildingId: string;
+  role: BuildingRole;
+  buildingName: string;
+  prebuilt: boolean;
   built: boolean;
   placementActive: boolean;
-  /** Construction progress 0..1, or null when not currently under construction. */
   constructionProgress: number | null;
+  buildCostLabel: string;
   canAffordBuilding: boolean;
+  units: HUDUnitDef[];
+  unitAffordability: Record<string, boolean>;
   queueLength: number;
-  /** Progress 0..1 of the item at the head of the queue, or null when idle. */
   queueProgress: number | null;
   queueFull: boolean;
-  unitAffordability: Record<string, boolean>;
-  /** Whether this building currently has a rally point set. */
   hasRallyPoint: boolean;
-  /** Whether this panel is the one currently arming rally-point placement (waiting for a ground click). */
   rallyArmed: boolean;
+  showMergeOption: boolean;
+  mergeCostLabel: string;
+  canAffordMerge: boolean;
 }
 
 export interface HUDState {
@@ -48,30 +44,40 @@ export interface HUDState {
   panels: HUDPanelState[];
 }
 
-function styleButton(button: HTMLButtonElement): void {
-  button.style.cssText = `
-    font: inherit; font-size: 13px; color: #dff3ff; text-align: left;
-    background: rgba(46,163,255,0.15); border: 1px solid #2ea3ff88;
-    border-radius: 4px; padding: 11px 12px; cursor: pointer;
-    min-height: 40px; touch-action: manipulation;
-  `;
-  button.addEventListener('mouseenter', () => {
-    if (!button.disabled) button.style.background = 'rgba(46,163,255,0.32)';
-  });
-  button.addEventListener('mouseleave', () => {
-    if (!button.disabled) button.style.background = 'rgba(46,163,255,0.15)';
-  });
+const TILE_SIZE = 56;
+
+function shortLabel(name: string): string {
+  // "Nexus Core" -> "Core", "Cyber-Forge" -> "Forge", "EMP Arc Turret" -> "Turret" — last word reads best on a small tile.
+  const words = name.split(/[\s-]+/);
+  return words[words.length - 1];
 }
 
-interface PanelElements {
-  container: HTMLDivElement;
-  buildButton: HTMLButtonElement | null;
+interface TileElements {
+  tile: HTMLButtonElement;
+  progressRing: HTMLDivElement;
+  queueBadge: HTMLDivElement;
+  label: HTMLDivElement;
+}
+
+interface TrayElements {
+  tray: HTMLDivElement;
+  title: HTMLDivElement;
+  buildRow: HTMLButtonElement;
   queueLabel: HTMLDivElement;
+  unitsRow: HTMLDivElement;
   unitButtons: Map<string, HTMLButtonElement>;
-  rallyButton: HTMLButtonElement | null;
+  rallySetBtn: HTMLButtonElement;
+  rallyClearBtn: HTMLButtonElement;
+  mergeBtn: HTMLButtonElement;
 }
 
-/** DOM-based HUD: resource counters + one panel per production building, built once and updated per-frame. */
+/**
+ * Mobile-RTS-style bottom-center action bar: a slim row of building tiles
+ * (per §research into Boom Beach / Clash-style build menus — only the most
+ * urgent info stays persistent) with one collapsible tray above the bar,
+ * opened by tapping a tile, instead of every building's full panel being
+ * permanently expanded and covering the screen.
+ */
 export class HUD {
   private readonly coreEnergyEl: HTMLSpanElement;
   private readonly factionResourceEl: HTMLSpanElement;
@@ -79,9 +85,13 @@ export class HUD {
   private readonly statusEl: HTMLDivElement;
   private readonly selectionEl: HTMLDivElement;
   private readonly convergeButton: HTMLButtonElement;
-  private readonly panels = new Map<string, PanelElements>();
+  private readonly tiles = new Map<BuildingRole, TileElements>();
+  private readonly trays = new Map<BuildingRole, TrayElements>();
+  private readonly callbacks: HUDCallbacks;
+  private openRole: BuildingRole | null = null;
 
-  constructor(container: HTMLElement, panelDefs: HUDPanelDef[], callbacks: HUDCallbacks) {
+  constructor(container: HTMLElement, roles: BuildingRole[], callbacks: HUDCallbacks) {
+    this.callbacks = callbacks;
     const root = document.createElement('div');
     root.style.cssText = `
       position: absolute; top: 12px; left: 12px; right: 12px;
@@ -103,24 +113,15 @@ export class HUD {
     resourceBar.append(this.coreEnergyEl, this.factionResourceEl, this.supplyEl);
     root.appendChild(resourceBar);
 
-    const panelsBar = document.createElement('div');
-    panelsBar.style.cssText = 'display: flex; flex-direction: column; gap: 8px; align-items: flex-end;';
-
-    for (const def of panelDefs) {
-      panelsBar.appendChild(this.buildPanel(def, callbacks));
-    }
-
     this.statusEl = document.createElement('div');
     this.statusEl.style.cssText =
-      'font-size: 12px; color: #9fd8ff; background: rgba(10,16,24,0.75); border-radius: 4px; padding: 4px 8px; min-height: 14px;';
-    panelsBar.appendChild(this.statusEl);
-
-    root.appendChild(panelsBar);
+      'background: rgba(10,16,24,0.75); border-radius: 4px; padding: 4px 10px; font-size: 12px; color: #9fd8ff; min-height: 14px; pointer-events: none;';
+    root.appendChild(this.statusEl);
     container.appendChild(root);
 
     this.selectionEl = document.createElement('div');
     this.selectionEl.style.cssText = `
-      position: absolute; bottom: 12px; left: 12px;
+      position: absolute; bottom: 12px; left: 12px; max-width: 320px;
       background: rgba(10,16,24,0.75); border: 1px solid #2ea3ff55;
       border-radius: 6px; padding: 8px 14px; font-size: 13px; color: #dff3ff;
       font-family: 'Segoe UI', Roboto, sans-serif; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -130,7 +131,7 @@ export class HUD {
 
     this.convergeButton = document.createElement('button');
     this.convergeButton.style.cssText = `
-      position: absolute; bottom: 52px; left: 12px;
+      position: absolute; bottom: 52px; left: 12px; max-width: 320px;
       font-size: 13px; color: #0b0d10; font-weight: 700; text-align: left;
       background: linear-gradient(135deg, #9fe8ff, #4fc3ff); border: 1px solid #dff3ff;
       border-radius: 6px; padding: 12px 14px; cursor: pointer; display: none;
@@ -138,71 +139,129 @@ export class HUD {
     `;
     container.appendChild(this.convergeButton);
 
-    const hintEl = document.createElement('div');
-    hintEl.style.cssText = `
-      position: absolute; bottom: 190px; right: 12px;
-      background: rgba(10,16,24,0.6); border: 1px solid #2ea3ff33;
-      border-radius: 6px; padding: 6px 12px; font-size: 11px; color: #9fd8ffcc;
-      font-family: 'Segoe UI', Roboto, sans-serif; pointer-events: none; user-select: none;
+    // --- Bottom-center building bar + one shared tray slot above it ---
+    const bottomCenter = document.createElement('div');
+    bottomCenter.style.cssText = `
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column-reverse; align-items: center; gap: 8px;
     `;
-    hintEl.textContent = 'Drag: select · Right-click: move/attack · Dbl-click: select type · Ctrl+1-9: set group · 1-9: recall group';
-    container.appendChild(hintEl);
+    container.appendChild(bottomCenter);
+
+    const tileRow = document.createElement('div');
+    tileRow.style.cssText = 'display: flex; gap: 8px; pointer-events: auto;';
+    bottomCenter.appendChild(tileRow);
+
+    const trayHost = document.createElement('div');
+    trayHost.style.cssText = 'pointer-events: auto;';
+    bottomCenter.appendChild(trayHost);
+
+    for (const role of roles) {
+      const { tileEl, tileParts } = this.buildTile(role);
+      tileRow.appendChild(tileEl);
+      this.tiles.set(role, tileParts);
+
+      const trayParts = this.buildTray(role, callbacks);
+      trayParts.tray.style.display = 'none';
+      trayHost.appendChild(trayParts.tray);
+      this.trays.set(role, trayParts);
+    }
   }
 
-  private buildPanel(def: HUDPanelDef, callbacks: HUDCallbacks): HTMLDivElement {
-    const panel = document.createElement('div');
-    panel.style.cssText = `
-      background: rgba(10,16,24,0.75); border: 1px solid #2ea3ff55;
-      border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 5px;
-      pointer-events: auto; min-width: 240px;
+  private buildTile(role: BuildingRole): { tileEl: HTMLButtonElement; tileParts: TileElements } {
+    const tile = document.createElement('button');
+    tile.style.cssText = `
+      position: relative; width: ${TILE_SIZE}px; height: ${TILE_SIZE}px;
+      background: rgba(10,16,24,0.85); border: 2px solid #2ea3ff55; border-radius: 10px;
+      cursor: pointer; touch-action: manipulation; padding: 0;
+    `;
+    tile.addEventListener('click', () => {
+      this.openRole = this.openRole === role ? null : role;
+      this.applyOpenState();
+    });
+
+    const progressRing = document.createElement('div');
+    progressRing.style.cssText = `
+      position: absolute; inset: -2px; border-radius: 10px; pointer-events: none;
+      border: 2px solid transparent;
+    `;
+    tile.appendChild(progressRing);
+
+    const label = document.createElement('div');
+    label.style.cssText = `
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 600; color: #dff3ff; text-align: center; padding: 2px;
+      line-height: 1.15; text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+    `;
+    tile.appendChild(label);
+
+    const queueBadge = document.createElement('div');
+    queueBadge.style.cssText = `
+      position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; border-radius: 8px;
+      background: #4fc3ff; color: #0b0d10; font-size: 10px; font-weight: 700;
+      display: none; align-items: center; justify-content: center; padding: 0 3px;
+    `;
+    tile.appendChild(queueBadge);
+
+    return { tileEl: tile, tileParts: { tile, progressRing, queueBadge, label } };
+  }
+
+  private buildTray(role: BuildingRole, callbacks: HUDCallbacks): TrayElements {
+    const tray = document.createElement('div');
+    tray.style.cssText = `
+      background: rgba(10,16,24,0.9); border: 1px solid #2ea3ff55; border-radius: 8px;
+      padding: 10px; display: flex; flex-direction: column; gap: 6px; min-width: 240px; max-width: 320px;
     `;
 
     const title = document.createElement('div');
-    title.style.cssText = 'font-size: 12px; font-weight: 600; color: #9fd8ff;';
-    title.textContent = def.buildingName;
-    panel.appendChild(title);
+    title.style.cssText = 'font-size: 12px; font-weight: 700; color: #9fd8ff;';
+    tray.appendChild(title);
 
-    let buildButton: HTMLButtonElement | null = null;
-    if (!def.prebuilt) {
-      buildButton = document.createElement('button');
-      styleButton(buildButton);
-      buildButton.textContent = `Build ${def.buildingName} (${def.buildCostLabel})`;
-      buildButton.addEventListener('click', () => callbacks.onBeginPlaceBuilding(def.buildingId));
-      panel.appendChild(buildButton);
-    }
-
-    const unitButtons = new Map<string, HTMLButtonElement>();
-    for (const unit of def.units) {
-      const btn = document.createElement('button');
-      styleButton(btn);
-      btn.textContent = `Train ${unit.name} (${unit.costLabel})`;
-      btn.style.display = 'none';
-      btn.addEventListener('click', () => callbacks.onQueueUnit(def.buildingId, unit.unitId));
-      panel.appendChild(btn);
-      unitButtons.set(unit.unitId, btn);
-    }
+    const buildRow = document.createElement('button');
+    styleCompactButton(buildRow);
+    buildRow.addEventListener('click', () => callbacks.onBeginPlaceBuilding(role));
+    tray.appendChild(buildRow);
 
     const queueLabel = document.createElement('div');
     queueLabel.style.cssText = 'font-size: 11px; color: #9fd8ffcc;';
-    panel.appendChild(queueLabel);
+    tray.appendChild(queueLabel);
 
-    let rallyButton: HTMLButtonElement | null = null;
-    if (def.units.length > 0) {
-      rallyButton = document.createElement('button');
-      styleButton(rallyButton);
-      rallyButton.style.display = 'none';
-      rallyButton.textContent = '🚩 Set Rally Point';
-      rallyButton.title = 'Click to place, right-click to clear';
-      rallyButton.addEventListener('click', () => callbacks.onSetRallyPoint(def.buildingId));
-      rallyButton.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        callbacks.onClearRallyPoint(def.buildingId);
-      });
-      panel.appendChild(rallyButton);
+    const unitsRow = document.createElement('div');
+    unitsRow.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+    tray.appendChild(unitsRow);
+
+    const rallyRow = document.createElement('div');
+    rallyRow.style.cssText = 'display: flex; gap: 4px;';
+    const rallySetBtn = document.createElement('button');
+    styleCompactButton(rallySetBtn);
+    rallySetBtn.style.flex = '1';
+    rallySetBtn.addEventListener('click', () => callbacks.onSetRallyPoint(role));
+    const rallyClearBtn = document.createElement('button');
+    styleCompactButton(rallyClearBtn);
+    rallyClearBtn.textContent = '✕';
+    rallyClearBtn.style.flex = '0 0 32px';
+    rallyClearBtn.style.textAlign = 'center';
+    rallyClearBtn.addEventListener('click', () => callbacks.onClearRallyPoint(role));
+    rallyRow.append(rallySetBtn, rallyClearBtn);
+    tray.appendChild(rallyRow);
+
+    const mergeBtn = document.createElement('button');
+    styleCompactButton(mergeBtn);
+    mergeBtn.style.background = 'linear-gradient(135deg, #ffd39f, #ff9f4f)';
+    mergeBtn.style.color = '#241505';
+    mergeBtn.style.fontWeight = '700';
+    mergeBtn.addEventListener('click', () => callbacks.onMergeBuildings());
+    tray.appendChild(mergeBtn);
+
+    return { tray, title, buildRow, queueLabel, unitsRow, unitButtons: new Map(), rallySetBtn, rallyClearBtn, mergeBtn };
+  }
+
+  private applyOpenState(): void {
+    for (const [role, tray] of this.trays) {
+      tray.tray.style.display = this.openRole === role ? 'flex' : 'none';
     }
-
-    this.panels.set(def.buildingId, { container: panel, buildButton, queueLabel, unitButtons, rallyButton });
-    return panel;
+    for (const [role, tile] of this.tiles) {
+      tile.tile.style.borderColor = this.openRole === role ? '#9fe8ff' : '#2ea3ff55';
+    }
   }
 
   update(state: HUDState): void {
@@ -211,50 +270,107 @@ export class HUD {
     this.supplyEl.textContent = `Supply: ${state.supplyUsed} (${state.unitCount} units)`;
 
     for (const panelState of state.panels) {
-      const els = this.panels.get(panelState.buildingId);
-      if (!els) continue;
+      this.updateTile(panelState);
+      this.updateTray(panelState);
+    }
+  }
 
-      if (els.buildButton) {
-        if (panelState.built) {
-          els.buildButton.style.display = 'none';
-        } else {
-          els.buildButton.style.display = 'block';
-          if (panelState.constructionProgress !== null) {
-            els.buildButton.textContent = `Building… ${Math.floor(panelState.constructionProgress * 100)}%`;
-            els.buildButton.disabled = true;
-          } else if (panelState.placementActive) {
-            els.buildButton.textContent = 'Click the ground to place (Esc to cancel)';
-            els.buildButton.disabled = false;
-          } else {
-            els.buildButton.disabled = !panelState.canAffordBuilding;
-          }
-        }
+  private updateTile(panelState: HUDPanelState): void {
+    const tile = this.tiles.get(panelState.role);
+    if (!tile) return;
+
+    tile.label.textContent = shortLabel(panelState.buildingName);
+    tile.tile.style.opacity = panelState.built || panelState.constructionProgress !== null ? '1' : '0.7';
+
+    if (panelState.constructionProgress !== null) {
+      const deg = Math.floor(panelState.constructionProgress * 360);
+      tile.progressRing.style.border = 'none';
+      tile.progressRing.style.background = `conic-gradient(#4fc3ff ${deg}deg, transparent ${deg}deg)`;
+      tile.progressRing.style.opacity = '0.9';
+    } else {
+      tile.progressRing.style.background = 'none';
+      tile.progressRing.style.border = panelState.built ? '2px solid #4fc3ff88' : '2px dashed #9fd8ff55';
+    }
+
+    if (panelState.queueLength > 0) {
+      tile.queueBadge.style.display = 'flex';
+      tile.queueBadge.textContent = String(panelState.queueLength);
+    } else {
+      tile.queueBadge.style.display = 'none';
+    }
+  }
+
+  private updateTray(panelState: HUDPanelState): void {
+    const tray = this.trays.get(panelState.role);
+    if (!tray) return;
+
+    tray.title.textContent = panelState.buildingName;
+
+    if (panelState.prebuilt || panelState.built) {
+      tray.buildRow.style.display = 'none';
+    } else {
+      tray.buildRow.style.display = 'block';
+      if (panelState.constructionProgress !== null) {
+        tray.buildRow.textContent = `Building… ${Math.floor(panelState.constructionProgress * 100)}%`;
+        tray.buildRow.disabled = true;
+      } else if (panelState.placementActive) {
+        tray.buildRow.textContent = 'Click the ground to place (Esc to cancel)';
+        tray.buildRow.disabled = false;
+      } else {
+        tray.buildRow.textContent = `Build ${panelState.buildingName} (${panelState.buildCostLabel})`;
+        tray.buildRow.disabled = !panelState.canAffordBuilding;
       }
+    }
 
-      for (const [unitId, btn] of els.unitButtons) {
-        btn.style.display = panelState.built ? 'block' : 'none';
-        if (!panelState.built) continue;
-        btn.disabled = panelState.queueFull || !panelState.unitAffordability[unitId];
+    const built = panelState.built;
+    tray.queueLabel.textContent =
+      built && panelState.queueLength > 0
+        ? `Queue: ${panelState.queueLength}${panelState.queueFull ? ' (full)' : ''} — building ${Math.floor((panelState.queueProgress ?? 0) * 100)}%`
+        : '';
+
+    // Rebuild the unit-button list only when the set of producible units actually changed (building fusion can change it mid-game).
+    const currentIds = [...tray.unitButtons.keys()];
+    const wantedIds = panelState.units.map((u) => u.unitId);
+    if (currentIds.join(',') !== wantedIds.join(',')) {
+      tray.unitsRow.innerHTML = '';
+      tray.unitButtons.clear();
+      for (const unit of panelState.units) {
+        const btn = document.createElement('button');
+        styleCompactButton(btn);
+        btn.addEventListener('click', () => this.callbacks.onQueueUnit(panelState.role, unit.unitId));
+        tray.unitsRow.appendChild(btn);
+        tray.unitButtons.set(unit.unitId, btn);
       }
+    }
+    for (const unit of panelState.units) {
+      const btn = tray.unitButtons.get(unit.unitId);
+      if (!btn) continue;
+      btn.style.display = built ? 'block' : 'none';
+      btn.textContent = `${unit.name}  ${unit.costLabel}`;
+      btn.disabled = panelState.queueFull || !panelState.unitAffordability[unit.unitId];
+    }
 
-      els.queueLabel.textContent =
-        panelState.built && panelState.queueLength > 0
-          ? `Queue: ${panelState.queueLength}${panelState.queueFull ? ' (full)' : ''} — building ${Math.floor((panelState.queueProgress ?? 0) * 100)}%`
-          : '';
+    const canRally = built && panelState.units.length > 0;
+    tray.rallySetBtn.style.display = canRally ? 'block' : 'none';
+    tray.rallyClearBtn.style.display = canRally && panelState.hasRallyPoint ? 'block' : 'none';
+    if (canRally) {
+      tray.rallySetBtn.textContent = panelState.rallyArmed
+        ? '🚩 Click ground (Esc)'
+        : panelState.hasRallyPoint
+          ? '🚩 Rally set'
+          : '🚩 Set rally point';
+    }
 
-      if (els.rallyButton) {
-        els.rallyButton.style.display = panelState.built ? 'block' : 'none';
-        if (panelState.rallyArmed) {
-          els.rallyButton.textContent = 'Click the ground to set rally (Esc to cancel)';
-        } else {
-          els.rallyButton.textContent = panelState.hasRallyPoint ? '🚩 Rally Set (right-click to clear)' : '🚩 Set Rally Point';
-        }
-      }
+    tray.mergeBtn.style.display = panelState.showMergeOption ? 'block' : 'none';
+    if (panelState.showMergeOption) {
+      tray.mergeBtn.textContent = `⚡ Merge Buildings (${panelState.mergeCostLabel})`;
+      tray.mergeBtn.disabled = !panelState.canAffordMerge;
+    }
 
-      for (const btn of [...(els.buildButton ? [els.buildButton] : []), ...els.unitButtons.values(), ...(els.rallyButton ? [els.rallyButton] : [])]) {
-        btn.style.opacity = btn.disabled ? '0.5' : '1';
-        btn.style.cursor = btn.disabled ? 'default' : 'pointer';
-      }
+    for (const btn of [tray.buildRow, ...tray.unitButtons.values(), tray.rallySetBtn, tray.rallyClearBtn, tray.mergeBtn]) {
+      if (btn.style.display === 'none') continue;
+      btn.style.opacity = btn.disabled ? '0.5' : '1';
+      btn.style.cursor = btn.disabled ? 'default' : 'pointer';
     }
   }
 
@@ -277,4 +393,19 @@ export class HUD {
     this.convergeButton.textContent = option.label;
     this.convergeButton.onclick = option.onClick;
   }
+}
+
+function styleCompactButton(button: HTMLButtonElement): void {
+  button.style.cssText = `
+    font: inherit; font-size: 12px; color: #dff3ff; text-align: left;
+    background: rgba(46,163,255,0.15); border: 1px solid #2ea3ff88;
+    border-radius: 4px; padding: 8px 10px; cursor: pointer;
+    min-height: 34px; touch-action: manipulation;
+  `;
+  button.addEventListener('mouseenter', () => {
+    if (!button.disabled) button.style.background = 'rgba(46,163,255,0.32)';
+  });
+  button.addEventListener('mouseleave', () => {
+    if (!button.disabled) button.style.background = 'rgba(46,163,255,0.15)';
+  });
 }
