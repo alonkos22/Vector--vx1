@@ -17,27 +17,31 @@ export interface MinimapState {
 
 /** Internal canvas resolution — stays crisp at the expanded display size; CSS width/height controls what's actually shown. */
 const CANVAS_RES_PX = 220;
-const DEFAULT_SIZE_PX = 100;
+/** Matches HUD.ts's building-tile size, so the collapsed map reads as one more button in the bottom bar rather than a separate floating panel. */
+const COLLAPSED_SIZE_PX = 56;
 const EXPANDED_SIZE_PX = 220;
 
 /**
  * Canvas-drawn top-down overview: own units/buildings, fog-of-war-visible
- * enemy contacts, and a click/drag-to-recenter viewport box. Small by
- * default so it doesn't cover the corner of the viewport; expands only
- * while actively pressed (a press-and-hold magnifier, not a toggle) for a
- * clearer view/more precise click, then shrinks back on release.
+ * enemy contacts, and a click/drag-to-recenter viewport box. Collapsed to a
+ * small square button (styled and sized like the bottom bar's building
+ * tiles) until tapped; tapping it opens the full map, and tapping anywhere
+ * outside it closes it back down — the same open/dismiss pattern as the
+ * HUD's build/train tray.
  */
 export class Minimap {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private mapHalfExtent = 100;
+  private expanded = false;
 
   /**
    * `onNavigate` (left-click/drag, or any touch tap) recenters the camera.
    * `onCommand` (right-click) issues a move/attack order to the current
    * selection at that world point, mirroring right-click on the main
    * viewport — lets the player command the army without panning off an
-   * important view first.
+   * important view first. Both only fire once the map is open — the first
+   * tap on the collapsed button just opens it.
    */
   constructor(container: HTMLElement, onNavigate: (worldX: number, worldZ: number) => void, onCommand: (worldX: number, worldZ: number) => void) {
     this.canvas = document.createElement('canvas');
@@ -45,17 +49,19 @@ export class Minimap {
     this.canvas.height = CANVAS_RES_PX;
     this.canvas.style.cssText = `
       position: absolute; bottom: 12px; right: 12px;
-      width: ${DEFAULT_SIZE_PX}px; height: ${DEFAULT_SIZE_PX}px;
-      background: rgba(10,16,24,0.85); border: 1px solid #2ea3ff55; border-radius: 6px;
-      cursor: pointer; touch-action: none; transition: width 0.12s ease, height 0.12s ease;
+      width: ${COLLAPSED_SIZE_PX}px; height: ${COLLAPSED_SIZE_PX}px;
+      background: rgba(10,16,24,0.85); border: 2px solid #2ea3ff55; border-radius: 10px;
+      cursor: pointer; touch-action: none; transition: width 0.15s ease, height 0.15s ease, border-color 0.15s ease;
+      z-index: 55;
     `;
     container.appendChild(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
 
-    const setExpanded = (expanded: boolean): void => {
-      const px = expanded ? EXPANDED_SIZE_PX : DEFAULT_SIZE_PX;
+    const applyState = (): void => {
+      const px = this.expanded ? EXPANDED_SIZE_PX : COLLAPSED_SIZE_PX;
       this.canvas.style.width = `${px}px`;
       this.canvas.style.height = `${px}px`;
+      this.canvas.style.borderColor = this.expanded ? '#9fe8ff' : '#2ea3ff55';
     };
 
     const worldPointFromEvent = (e: PointerEvent | MouseEvent): [number, number] => {
@@ -67,16 +73,25 @@ export class Minimap {
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      setExpanded(true);
+      if (!this.expanded) {
+        this.expanded = true;
+        applyState();
+        return;
+      }
       const [x, z] = worldPointFromEvent(e);
       if (e.button === 2) onCommand(x, z);
       else onNavigate(x, z);
     });
     this.canvas.addEventListener('pointermove', (e) => {
-      if (e.buttons === 1) onNavigate(...worldPointFromEvent(e));
+      if (this.expanded && e.buttons === 1) onNavigate(...worldPointFromEvent(e));
     });
-    window.addEventListener('pointerup', () => setExpanded(false));
-    this.canvas.addEventListener('pointercancel', () => setExpanded(false));
+    // Tapping anywhere outside the map (while it's open) closes it back to the small button.
+    window.addEventListener('pointerdown', (e) => {
+      if (this.expanded && e.target !== this.canvas) {
+        this.expanded = false;
+        applyState();
+      }
+    });
   }
 
   private toCanvas(x: number, z: number): [number, number] {
