@@ -10,6 +10,7 @@ import { RankBadge } from '../RankBadge';
 import { PowerBar } from '../PowerBar';
 import { buildUnitVisual } from './visuals';
 import { acquireTarget } from '../Targeting';
+import { classDamageMultiplier } from '../../config/unitClasses';
 
 const AGGRO_RANGE_BONUS = 5;
 const LUNGE_DURATION_SEC = 0.18;
@@ -286,7 +287,8 @@ export class CombatUnit extends Unit implements Targetable {
     for (const target of targets) {
       const targetHeight = elevation.getHeightAt(target.position.x, target.position.z);
       const onHighGround = myHeight > targetHeight + 0.1;
-      const damage = onHighGround ? this.damage * HIGH_GROUND_DAMAGE_MULTIPLIER : this.damage;
+      const classMultiplier = target instanceof Unit ? classDamageMultiplier(this.unitTypeId, target.unitTypeId) : 1;
+      const damage = (onHighGround ? this.damage * HIGH_GROUND_DAMAGE_MULTIPLIER : this.damage) * classMultiplier;
 
       const wasAlive = target.isAlive();
       target.takeDamage(damage);

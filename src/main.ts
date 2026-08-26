@@ -37,6 +37,8 @@ import { preloadImportedUnitModels } from './game/ImportedUnitModels';
 import { getIcon } from './game/IconRenderer';
 import { buildBuildingVisual } from './game/buildingVisuals';
 import { buildUnitVisual } from './game/units/visuals';
+import { classLabel, classMatchupText } from './config/unitClasses';
+import type { HUDDetailInfo } from './ui/HUD';
 
 window.addEventListener('pointerdown', () => soundManager.unlock(), { once: true });
 window.addEventListener('keydown', () => soundManager.unlock(), { once: true });
@@ -756,6 +758,98 @@ const controlGroupBar = new ControlGroupBar(
   },
 );
 
+const ROLE_LABEL: Record<BuildingRole, string> = {
+  main: 'Main Structure',
+  resourceDropoff: 'Resource Dropoff',
+  basicProduction: 'Basic Production',
+  heavyProduction: 'Heavy Production',
+};
+
+/** Icon + label pointing at a related unit's picture for the detail popup's fusion row (per user request: show a picture of the unit that gets created, and how many of the original unit are needed). Prefers showing "what this fuses INTO" (the more actionable direction while browsing a build menu); falls back to "what this was fused FROM" for a unit that's itself a Convergence output. */
+function findUnitFusionInfo(unitId: string): { iconUrl: string; label: string } | null {
+  const asInput = PLAYER_CONVERGENCE.find((r) => unitId in r.inputs);
+  if (asInput) {
+    const count = asInput.inputs[unitId];
+    const otherInputs = Object.entries(asInput.inputs).filter(([id]) => id !== unitId);
+    const extra = otherInputs.length > 0 ? ` + ${otherInputs.map(([id, c]) => `${c}× ${PLAYER_UNITS[id].name}`).join(' + ')}` : '';
+    return {
+      iconUrl: getIcon(`unit:${asInput.outputUnitId}`, () => buildUnitVisual(asInput.outputUnitId)),
+      label: `⚡ Fuses into: ${asInput.name} (needs ${count}×${extra})`,
+    };
+  }
+  const asOutput = PLAYER_CONVERGENCE.find((r) => r.outputUnitId === unitId);
+  if (asOutput) {
+    const [firstInputId] = Object.keys(asOutput.inputs);
+    const inputsLabel = Object.entries(asOutput.inputs)
+      .map(([id, count]) => `${count}× ${PLAYER_UNITS[id].name}`)
+      .join(' + ');
+    return { iconUrl: getIcon(`unit:${firstInputId}`, () => buildUnitVisual(firstInputId)), label: `⚡ Made by fusing: ${inputsLabel}` };
+  }
+  return null;
+}
+
+/** Full stat/matchup breakdown for a unit's long-press detail popup (per user request: cost, resources, HP, attack, class strengths/weaknesses, speed, and a picture + count for its Convergence fusion). */
+function buildUnitDetail(unitConfig: UnitConfig): HUDDetailInfo {
+  const combat = unitConfig.combat;
+  const lines: string[] = [`💰 Cost: ${formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec)}`];
+  lines.push(unitConfig.costFactionResource > 0 ? `Needs: Core Energy + ${FACTION.factionResourceName}` : 'Needs: Core Energy only');
+
+  if (combat) {
+    lines.push(`❤ HP: ${combat.hp}`);
+    const dps = (combat.damage * (combat.multiTargetCount ?? 1)) / combat.attackCooldown;
+    const targetsText = combat.multiTargetCount ? ` × ${combat.multiTargetCount} targets at once` : '';
+    lines.push(`⚔ Attack: ${combat.damage} dmg${targetsText}, every ${combat.attackCooldown}s (≈${dps.toFixed(1)} dps), range ${combat.attackRange}`);
+  } else {
+    lines.push('❤ Non-combat (economy unit — no attack or defense)');
+  }
+
+  const speedTag = unitConfig.moveSpeed >= 6.5 ? '⚡ Fast' : unitConfig.moveSpeed <= 4 ? '🐌 Slow' : '🚶 Normal';
+  lines.push(`Move speed: ${unitConfig.moveSpeed} (${speedTag})`);
+
+  const cls = classLabel(unitConfig.id);
+  const matchup = classMatchupText(unitConfig.id);
+  if (cls && matchup) lines.push(`${cls} — strong vs ${matchup.strongVs}, weak vs ${matchup.weakVs}`);
+
+  return {
+    title: unitConfig.name,
+    iconUrl: getIcon(`unit:${unitConfig.id}`, () => buildUnitVisual(unitConfig.id)),
+    subtitle: unitConfig.role,
+    lines,
+    fusion: findUnitFusionInfo(unitConfig.id),
+  };
+}
+
+/** Full stat breakdown for a building's long-press detail popup, including what it merges into if it's a production building (per user request). */
+function buildBuildingDetail(role: BuildingRole, config: BuildingConfig): HUDDetailInfo {
+  const lines: string[] = [`💰 Cost: ${formatCost(config.costCoreEnergy, config.costFactionResource, config.buildTimeSec)}`];
+  lines.push(config.costFactionResource > 0 ? `Needs: Core Energy + ${FACTION.factionResourceName}` : 'Needs: Core Energy only');
+  lines.push(`❤ HP: ${config.maxHp}`);
+  lines.push(`👁 Vision: ${config.visionRadius}`);
+  if (config.produces.length > 0) lines.push(`🏭 Produces: ${config.produces.map((id) => PLAYER_UNITS[id].name).join(', ')}`);
+
+  let fusion: HUDDetailInfo['fusion'] = null;
+  if (role === 'basicProduction' || role === 'heavyProduction') {
+    const recipe = BUILDING_FUSION_BY_FACTION[PLAYER_FACTION_ID];
+    fusion = {
+      iconUrl: getIcon(`building:${recipe.id}`, () =>
+        buildBuildingVisual('heavyProduction', recipe.footprint, recipe.color, recipe.materialRoughness, recipe.materialMetalness, config.shapeFamily).group,
+      ),
+      label: `⚡ Merges with the other production building into: ${recipe.name} (${formatCost(recipe.extraCoreEnergyCost, recipe.extraFactionResourceCost, recipe.buildTimeSec)})`,
+    };
+  }
+
+  return {
+    title: config.name,
+    iconUrl: getIcon(
+      `building:${config.id}`,
+      () => buildBuildingVisual(role, config.footprint, config.color, config.materialRoughness, config.materialMetalness, config.shapeFamily).group,
+    ),
+    subtitle: ROLE_LABEL[role],
+    lines,
+    fusion,
+  };
+}
+
 function buildPanelState(role: BuildingRole): HUDPanelState {
   const config = currentBuildingConfig(role);
   const building = playerBase.getBuildingByRole(role);
@@ -771,6 +865,7 @@ function buildPanelState(role: BuildingRole): HUDPanelState {
         ...unitStatsAndAbilities(unitConfig),
         power: unitPowerScore(unitConfig),
         iconUrl: getIcon(`unit:${unitId}`, () => buildUnitVisual(unitId)),
+        detail: buildUnitDetail(unitConfig),
       };
     })
     .sort((a, b) => b.power - a.power);
@@ -799,6 +894,7 @@ function buildPanelState(role: BuildingRole): HUDPanelState {
       `building:${config.id}`,
       () => buildBuildingVisual(role, config.footprint, config.color, config.materialRoughness, config.materialMetalness, config.shapeFamily).group,
     ),
+    detail: buildBuildingDetail(role, config),
     units,
     unitAffordability,
     queueLength: building?.queueLength() ?? 0,

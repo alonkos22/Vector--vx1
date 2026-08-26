@@ -1,6 +1,16 @@
 import type { BuildingRole } from '../config/buildings';
 import { soundManager } from '../game/SoundManager';
 
+/** Full breakdown shown in the long-press detail popup (per user request): cost, resources, HP, attack,
+ * class strengths/weaknesses, speed, and — for units that fuse — a picture of the fusion result. */
+export interface HUDDetailInfo {
+  title: string;
+  iconUrl: string;
+  subtitle: string;
+  lines: string[];
+  fusion?: { iconUrl: string; label: string } | null;
+}
+
 export interface HUDUnitDef {
   unitId: string;
   name: string;
@@ -11,6 +21,8 @@ export interface HUDUnitDef {
   abilityLabel: string;
   /** PNG data URL of the unit's actual in-game model, rendered by IconRenderer (per user request: a picture next to its name on the button used to build it). */
   iconUrl: string;
+  /** Long-press detail popup content. */
+  detail: HUDDetailInfo;
 }
 
 export interface HUDCallbacks {
@@ -36,6 +48,8 @@ export interface HUDPanelState {
   visionRadius: number;
   /** PNG data URL of the building's actual in-game model, rendered by IconRenderer. */
   iconUrl: string;
+  /** Long-press detail popup content. */
+  detail: HUDDetailInfo;
   units: HUDUnitDef[];
   unitAffordability: Record<string, boolean>;
   queueLength: number;
@@ -71,12 +85,15 @@ interface TileElements {
   queueBadge: HTMLDivElement;
   icon: HTMLImageElement;
   label: HTMLDivElement;
+  /** Latest detail content for this tile's building — read by the long-press handler at press time, so it's never stale even though the handler was attached once at tile creation. */
+  detail: HUDDetailInfo | null;
 }
 
 interface UnitButtonElements {
   btn: HTMLButtonElement;
   icon: HTMLImageElement;
   text: HTMLDivElement;
+  detail: HUDDetailInfo | null;
 }
 
 interface TrayElements {
@@ -111,6 +128,17 @@ export class HUD {
   private readonly trays = new Map<BuildingRole, TrayElements>();
   private readonly callbacks: HUDCallbacks;
   private openRole: BuildingRole | null = null;
+
+  // --- Long-press detail popup (per user request: full stats/matchup breakdown on demand) ---
+  private readonly detailOverlay: HTMLDivElement;
+  private readonly detailPanel: HTMLDivElement;
+  private readonly detailIcon: HTMLImageElement;
+  private readonly detailTitle: HTMLDivElement;
+  private readonly detailSubtitle: HTMLDivElement;
+  private readonly detailLines: HTMLDivElement;
+  private readonly detailFusionRow: HTMLDivElement;
+  private readonly detailFusionIcon: HTMLImageElement;
+  private readonly detailFusionLabel: HTMLDivElement;
 
   constructor(container: HTMLElement, roles: BuildingRole[], callbacks: HUDCallbacks) {
     this.callbacks = callbacks;
@@ -187,6 +215,132 @@ export class HUD {
       trayHost.appendChild(trayParts.tray);
       this.trays.set(role, trayParts);
     }
+
+    // --- Long-press detail popup: a centered modal, dismissed by tapping the dimmed backdrop or the close button ---
+    this.detailOverlay = document.createElement('div');
+    this.detailOverlay.style.cssText = `
+      position: absolute; inset: 0; background: rgba(4,6,10,0.72); z-index: 90;
+      display: none; align-items: center; justify-content: center; pointer-events: auto;
+    `;
+    this.detailOverlay.addEventListener('click', (e) => {
+      if (e.target === this.detailOverlay) this.hideDetail();
+    });
+    container.appendChild(this.detailOverlay);
+
+    this.detailPanel = document.createElement('div');
+    this.detailPanel.style.cssText = `
+      background: rgba(10,16,24,0.97); border: 1px solid #2ea3ff88; border-radius: 12px;
+      padding: 16px; width: min(300px, 84vw); max-height: 78vh; overflow-y: auto;
+      font-family: 'Segoe UI', Roboto, sans-serif; color: #dff3ff;
+    `;
+    this.detailOverlay.appendChild(this.detailPanel);
+
+    const detailHeader = document.createElement('div');
+    detailHeader.style.cssText = 'display: flex; align-items: center; gap: 10px; margin-bottom: 8px;';
+    this.detailIcon = document.createElement('img');
+    this.detailIcon.style.cssText = 'width: 48px; height: 48px; object-fit: contain; flex: none;';
+    const titleCol = document.createElement('div');
+    titleCol.style.cssText = 'flex: 1; min-width: 0;';
+    this.detailTitle = document.createElement('div');
+    this.detailTitle.style.cssText = 'font-size: 15px; font-weight: 700; color: #9fe8ff;';
+    this.detailSubtitle = document.createElement('div');
+    this.detailSubtitle.style.cssText = 'font-size: 11px; color: #dff3ffaa;';
+    titleCol.append(this.detailTitle, this.detailSubtitle);
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = `
+      flex: none; background: rgba(46,163,255,0.15); border: 1px solid #2ea3ff88; border-radius: 6px;
+      color: #dff3ff; font-size: 13px; width: 26px; height: 26px; cursor: pointer; touch-action: manipulation;
+    `;
+    closeBtn.addEventListener('click', () => this.hideDetail());
+    detailHeader.append(this.detailIcon, titleCol, closeBtn);
+    this.detailPanel.appendChild(detailHeader);
+
+    this.detailLines = document.createElement('div');
+    this.detailLines.style.cssText = 'display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 1.5;';
+    this.detailPanel.appendChild(this.detailLines);
+
+    this.detailFusionRow = document.createElement('div');
+    this.detailFusionRow.style.cssText = `
+      display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px;
+      border-top: 1px solid #2ea3ff33;
+    `;
+    this.detailFusionIcon = document.createElement('img');
+    this.detailFusionIcon.style.cssText = 'width: 32px; height: 32px; object-fit: contain; flex: none;';
+    this.detailFusionLabel = document.createElement('div');
+    this.detailFusionLabel.style.cssText = 'font-size: 11px; color: #dff3ffcc; flex: 1;';
+    this.detailFusionRow.append(this.detailFusionIcon, this.detailFusionLabel);
+    this.detailPanel.appendChild(this.detailFusionRow);
+  }
+
+  private showDetail(detail: HUDDetailInfo): void {
+    soundManager.playUIClick();
+    this.detailIcon.src = detail.iconUrl;
+    this.detailTitle.textContent = detail.title;
+    this.detailSubtitle.textContent = detail.subtitle;
+    this.detailLines.innerHTML = '';
+    for (const line of detail.lines) {
+      const row = document.createElement('div');
+      row.textContent = line;
+      this.detailLines.appendChild(row);
+    }
+    if (detail.fusion) {
+      this.detailFusionIcon.src = detail.fusion.iconUrl;
+      this.detailFusionLabel.textContent = detail.fusion.label;
+      this.detailFusionRow.style.display = 'flex';
+    } else {
+      this.detailFusionRow.style.display = 'none';
+    }
+    this.detailOverlay.style.display = 'flex';
+  }
+
+  private hideDetail(): void {
+    this.detailOverlay.style.display = 'none';
+  }
+
+  /**
+   * Long-press (per user request: full detail on hold, without disturbing the existing tap behavior — open
+   * tray / queue unit). Cancels on significant movement so it doesn't fire mid-drag or mid-scroll. Returns a
+   * `wasLongPress()` check the caller's own 'click' handler must call first and bail out on — same-element
+   * listeners fire in registration order regardless of a capture flag, so suppressing the click by racing
+   * event phases isn't reliable; an explicit shared flag is.
+   */
+  private attachLongPress(el: HTMLElement, onLongPress: () => void): { wasLongPress: () => boolean } {
+    const HOLD_MS = 480;
+    const MOVE_CANCEL_PX = 12;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let startX = 0;
+    let startY = 0;
+    let fired = false;
+
+    const clear = () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+    };
+
+    el.addEventListener('pointerdown', (e) => {
+      startX = e.clientX;
+      startY = e.clientY;
+      clear();
+      timer = setTimeout(() => {
+        fired = true;
+        onLongPress();
+      }, HOLD_MS);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (Math.hypot(e.clientX - startX, e.clientY - startY) > MOVE_CANCEL_PX) clear();
+    });
+    el.addEventListener('pointerup', clear);
+    el.addEventListener('pointerleave', clear);
+    el.addEventListener('pointercancel', clear);
+
+    return {
+      wasLongPress: () => {
+        if (!fired) return false;
+        fired = false;
+        return true;
+      },
+    };
   }
 
   private buildTile(role: BuildingRole): { tileEl: HTMLButtonElement; tileParts: TileElements } {
@@ -196,11 +350,6 @@ export class HUD {
       background: rgba(10,16,24,0.85); border: 2px solid #2ea3ff55; border-radius: 10px;
       cursor: pointer; touch-action: manipulation; padding: 0;
     `;
-    tile.addEventListener('click', () => {
-      soundManager.playUIClick();
-      this.openRole = this.openRole === role ? null : role;
-      this.applyOpenState();
-    });
 
     const progressRing = document.createElement('div');
     progressRing.style.cssText = `
@@ -232,7 +381,18 @@ export class HUD {
     `;
     tile.appendChild(queueBadge);
 
-    return { tileEl: tile, tileParts: { tile, progressRing, queueBadge, icon, label } };
+    const tileParts: TileElements = { tile, progressRing, queueBadge, icon, label, detail: null };
+    const longPress = this.attachLongPress(tile, () => {
+      if (tileParts.detail) this.showDetail(tileParts.detail);
+    });
+    tile.addEventListener('click', () => {
+      if (longPress.wasLongPress()) return;
+      soundManager.playUIClick();
+      this.openRole = this.openRole === role ? null : role;
+      this.applyOpenState();
+    });
+
+    return { tileEl: tile, tileParts };
   }
 
   private buildTray(role: BuildingRole, callbacks: HUDCallbacks): TrayElements {
@@ -335,6 +495,7 @@ export class HUD {
     tile.label.textContent = shortLabel(panelState.buildingName);
     tile.tile.style.opacity = panelState.built || panelState.constructionProgress !== null ? '1' : '0.7';
     if (tile.icon.src !== panelState.iconUrl) tile.icon.src = panelState.iconUrl;
+    tile.detail = panelState.detail;
 
     if (panelState.constructionProgress !== null) {
       const deg = Math.floor(panelState.constructionProgress * 360);
@@ -403,9 +564,16 @@ export class HUD {
         const text = document.createElement('div');
         text.style.cssText = 'white-space: pre-line; flex: 1; min-width: 0;';
         btn.append(icon, text);
-        btn.addEventListener('click', () => this.callbacks.onQueueUnit(panelState.role, unit.unitId));
+        const elements: UnitButtonElements = { btn, icon, text, detail: null };
+        const longPress = this.attachLongPress(btn, () => {
+          if (elements.detail) this.showDetail(elements.detail);
+        });
+        btn.addEventListener('click', () => {
+          if (longPress.wasLongPress()) return;
+          this.callbacks.onQueueUnit(panelState.role, unit.unitId);
+        });
         tray.unitsRow.appendChild(btn);
-        tray.unitButtons.set(unit.unitId, { btn, icon, text });
+        tray.unitButtons.set(unit.unitId, elements);
       }
     }
     for (const unit of panelState.units) {
@@ -413,6 +581,7 @@ export class HUD {
       if (!elements) continue;
       elements.btn.style.display = built ? 'flex' : 'none';
       if (elements.icon.src !== unit.iconUrl) elements.icon.src = unit.iconUrl;
+      elements.detail = unit.detail;
       elements.text.textContent = [unit.name, unit.statsLabel, unit.abilityLabel, unit.costLabel].filter(Boolean).join('\n');
       elements.btn.disabled = panelState.queueFull || !panelState.unitAffordability[unit.unitId];
     }

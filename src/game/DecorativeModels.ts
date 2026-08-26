@@ -73,17 +73,18 @@ function loadInstances(
 
 export function loadDecorativeModels(scene: THREE.Scene, mapHalfExtent: number, keepClearOf: OccupiedRegion[]): void {
   // Dune-scan ground patches: low, wide, flattened way down from the source's original relief so they read as ground texture variation across the arena rather than obstacles.
-  const sandCount = 14 + Math.floor(Math.random() * 10);
-  const sandPoints = scatterPoints(sandCount, mapHalfExtent, 6, 13, keepClearOf);
+  // Per user request: denser coverage across the whole map, not just near the bases.
+  const sandCount = 30 + Math.floor(Math.random() * 20);
+  const sandPoints = scatterPoints(sandCount, mapHalfExtent, 6, 9, keepClearOf);
   loadInstances(sandUrl, scene, sandPoints, [0.0035, 0.006], 0.3);
 
   // Bamboo groves: taller, more isolated landmarks.
-  const bambooCount = 6 + Math.floor(Math.random() * 9);
-  const bambooPoints = scatterPoints(bambooCount, mapHalfExtent, 10, 18, keepClearOf);
+  const bambooCount = 16 + Math.floor(Math.random() * 14);
+  const bambooPoints = scatterPoints(bambooCount, mapHalfExtent, 10, 13, keepClearOf);
   loadInstances(bambooUrl, scene, bambooPoints, [0.12, 0.22], 1);
 
-  // Cliff rock spires: rare, dramatic landmarks — kept sparse and well spread out.
-  const cliffCount = 3 + Math.floor(Math.random() * 5);
-  const cliffPoints = scatterPoints(cliffCount, mapHalfExtent, 15, 25, keepClearOf);
+  // Cliff rock spires: dramatic landmarks — still spread out (they're large), but noticeably more of them.
+  const cliffCount = 7 + Math.floor(Math.random() * 7);
+  const cliffPoints = scatterPoints(cliffCount, mapHalfExtent, 15, 20, keepClearOf);
   loadInstances(cliffRockUrl, scene, cliffPoints, [0.15, 0.35], 1);
 }
