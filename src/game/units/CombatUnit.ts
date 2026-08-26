@@ -5,12 +5,27 @@ import type { AttackVfxStyle } from '../../config/factions';
 import type { Targetable } from '../Targetable';
 import type { EffectManager } from '../CombatVFX';
 import { HealthBar } from '../HealthBar';
+import { RankBadge } from '../RankBadge';
 import { buildUnitVisual } from './visuals';
 import { acquireTarget } from '../Targeting';
 
 const AGGRO_RANGE_BONUS = 5;
 const LUNGE_DURATION_SEC = 0.18;
 const LUNGE_DISTANCE = 0.28;
+
+/**
+ * Veterancy: units earn xp from damage dealt (+ a kill bonus) and rank up at
+ * fixed thresholds, gaining a flat hp/damage multiplier and a gold-chevron
+ * badge. Purely a combat-earned bonus for this match — ranks don't survive
+ * a Convergence fusion (the output starts fresh) and harvesters don't
+ * participate (they never fight).
+ */
+const MAX_RANK = 2;
+const RANK_NAMES = ['Recruit', 'Veteran', 'Elite'];
+const RANK_XP_THRESHOLDS = [0, 30, 90];
+const RANK_STAT_MULTIPLIER = [1, 1.15, 1.35];
+const XP_PER_DAMAGE_DEALT = 0.5;
+const KILL_BONUS_XP = 15;
 
 type AttackState = 'idle' | 'windup';
 
@@ -24,7 +39,9 @@ export class CombatUnit extends Unit implements Targetable {
   hp: number;
   target: Targetable | null = null;
 
-  private readonly damage: number;
+  private damage: number;
+  private readonly baseMaxHp: number;
+  private readonly baseDamage: number;
   private readonly attackRange: number;
   private readonly aggroRange: number;
   private readonly attackCooldownSec: number;
@@ -33,6 +50,9 @@ export class CombatUnit extends Unit implements Targetable {
   private readonly effects: EffectManager;
   private readonly attackVfxStyle: AttackVfxStyle;
   private readonly healthBar: HealthBar;
+  private readonly rankBadge: RankBadge;
+  private xp = 0;
+  private rank = 0;
   private state: AttackState = 'idle';
   private cooldownRemaining = 0;
   private windupRemaining = 0;
@@ -48,7 +68,9 @@ export class CombatUnit extends Unit implements Targetable {
 
     this.maxHp = combat.hp;
     this.hp = combat.hp;
+    this.baseMaxHp = combat.hp;
     this.damage = combat.damage;
+    this.baseDamage = combat.damage;
     this.attackRange = combat.attackRange;
     this.aggroRange = combat.attackRange + AGGRO_RANGE_BONUS;
     this.attackCooldownSec = combat.attackCooldown;
@@ -60,6 +82,33 @@ export class CombatUnit extends Unit implements Targetable {
     this.healthBar = new HealthBar(combat.healthBarYOffset);
     this.mesh.add(this.healthBar.group);
     this.healthBar.update(1);
+
+    this.rankBadge = new RankBadge(combat.healthBarYOffset + 0.22, MAX_RANK);
+    this.mesh.add(this.rankBadge.group);
+  }
+
+  rankName(): string {
+    return RANK_NAMES[this.rank];
+  }
+
+  private gainXp(amount: number): void {
+    if (this.rank >= MAX_RANK) return;
+    this.xp += amount;
+    while (this.rank < MAX_RANK && this.xp >= RANK_XP_THRESHOLDS[this.rank + 1]) {
+      this.rank++;
+      this.applyRank();
+    }
+  }
+
+  /** Applies the new rank's stat multiplier — the hp bonus tops up current hp by the delta (a small heal), not just raising the cap. */
+  private applyRank(): void {
+    const multiplier = RANK_STAT_MULTIPLIER[this.rank];
+    const newMaxHp = this.baseMaxHp * multiplier;
+    this.hp = Math.min(this.hp + (newMaxHp - this.maxHp), newMaxHp);
+    this.maxHp = newMaxHp;
+    this.damage = this.baseDamage * multiplier;
+    this.healthBar.update(this.hp / this.maxHp);
+    this.rankBadge.setRank(this.rank);
   }
 
   isAlive(): boolean {
@@ -130,6 +179,7 @@ export class CombatUnit extends Unit implements Targetable {
 
     this.healthBar.setForcedVisible(this.selected);
     this.healthBar.faceCamera(camera);
+    this.rankBadge.faceCamera(camera);
   }
 
   /** Brief forward punch on the moment of impact, easing back to neutral — makes a resolved attack read as a hit rather than a silent timer tick. */
@@ -179,10 +229,12 @@ export class CombatUnit extends Unit implements Targetable {
     const origin = this.position.clone();
     origin.y = 1.3;
     for (const target of targets) {
+      const wasAlive = target.isAlive();
       target.takeDamage(this.damage);
       const impact = target.position.clone();
       impact.y = 1.1;
       this.effects.spawnAttackHit(this.attackVfxStyle, origin, impact);
+      this.gainXp(this.damage * XP_PER_DAMAGE_DEALT + (wasAlive && !target.isAlive() ? KILL_BONUS_XP : 0));
     }
   }
 

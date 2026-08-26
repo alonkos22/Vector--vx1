@@ -356,11 +356,14 @@ function updateSelectionHUD(): void {
     hud.setConvergenceOption(null);
     return;
   }
-  const byType = new Map<string, number>();
+  const byLabel = new Map<string, number>();
   for (const unit of selection.selected) {
-    byType.set(unit.unitTypeId, (byType.get(unit.unitTypeId) ?? 0) + 1);
+    const baseName = CYBER_NEXUS_UNITS[unit.unitTypeId]?.name ?? unit.unitTypeId;
+    const rankSuffix = unit instanceof CombatUnit && unit.rankName() !== 'Recruit' ? ` (${unit.rankName()})` : '';
+    const label = `${baseName}${rankSuffix}`;
+    byLabel.set(label, (byLabel.get(label) ?? 0) + 1);
   }
-  const parts = [...byType.entries()].map(([id, n]) => `${n}× ${CYBER_NEXUS_UNITS[id]?.name ?? id}`);
+  const parts = [...byLabel.entries()].map(([label, n]) => `${n}× ${label}`);
   hud.setSelectionInfo(`Selected: ${parts.join(', ')}`);
 
   const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
