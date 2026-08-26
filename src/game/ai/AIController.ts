@@ -3,11 +3,23 @@ import type { PlayerBase } from '../PlayerBase';
 import type { Targetable } from '../Targetable';
 
 type ArmyState = 'massing' | 'attacking' | 'retreating';
+export type AIDifficulty = 'easy' | 'medium' | 'hard';
 
-const DECISION_INTERVAL_SEC = 2.5;
-const HARVESTER_CAP = 6;
-const ATTACK_ARMY_SIZE = 6;
-const RETREAT_HP_FRACTION = 0.35;
+interface DifficultyPreset {
+  decisionIntervalSec: number;
+  harvesterCap: number;
+  attackArmySize: number;
+  retreatHpFraction: number;
+  /** Chance to queue the pricier of a basicProduction building's two producible units instead of a uniform-random pick. 0.5 = unbiased. */
+  strongUnitBias: number;
+}
+
+const DIFFICULTY_PRESETS: Record<AIDifficulty, DifficultyPreset> = {
+  easy: { decisionIntervalSec: 4.0, harvesterCap: 4, attackArmySize: 9, retreatHpFraction: 0.45, strongUnitBias: 0.5 },
+  medium: { decisionIntervalSec: 2.5, harvesterCap: 6, attackArmySize: 6, retreatHpFraction: 0.35, strongUnitBias: 0.5 },
+  hard: { decisionIntervalSec: 1.4, harvesterCap: 9, attackArmySize: 4, retreatHpFraction: 0.25, strongUnitBias: 0.7 },
+};
+
 const HOME_ARRIVAL_RADIUS = 15;
 
 /**
@@ -24,14 +36,21 @@ const HOME_ARRIVAL_RADIUS = 15;
 export class AIController {
   private readonly base: PlayerBase;
   private readonly enemyBasePosition: THREE.Vector3;
+  private preset: DifficultyPreset = DIFFICULTY_PRESETS.medium;
   private decisionTimer = 0;
   private armyState: ArmyState = 'massing';
   private attackStartMaxHp = 0;
   private readonly lastHpByEntity = new Map<Targetable, number>();
 
-  constructor(base: PlayerBase, enemyBasePosition: THREE.Vector3) {
+  constructor(base: PlayerBase, enemyBasePosition: THREE.Vector3, difficulty: AIDifficulty = 'medium') {
     this.base = base;
     this.enemyBasePosition = enemyBasePosition.clone();
+    this.setDifficulty(difficulty);
+  }
+
+  setDifficulty(difficulty: AIDifficulty): void {
+    this.preset = DIFFICULTY_PRESETS[difficulty];
+    this.decisionTimer = Math.min(this.decisionTimer, this.preset.decisionIntervalSec);
   }
 
   update(dt: number): void {
@@ -40,7 +59,7 @@ export class AIController {
 
     this.decisionTimer -= dt;
     if (this.decisionTimer > 0) return;
-    this.decisionTimer = DECISION_INTERVAL_SEC;
+    this.decisionTimer = this.preset.decisionIntervalSec;
 
     this.manageEconomy();
     this.manageProduction();
@@ -70,7 +89,7 @@ export class AIController {
 
   private manageEconomy(): void {
     const harvesterUnitId = this.base.harvesterUnitId();
-    if (harvesterUnitId && this.base.harvesters.length < HARVESTER_CAP) {
+    if (harvesterUnitId && this.base.harvesters.length < this.preset.harvesterCap) {
       this.base.tryQueueUnit('main', harvesterUnitId);
     }
 
@@ -92,7 +111,9 @@ export class AIController {
       if (!building || !building.isComplete) continue;
       const produces = building.config.produces;
       if (produces.length === 0) continue;
-      const unitTypeId = produces[Math.floor(Math.random() * produces.length)];
+      // Harder difficulties more often queue the pricier (typically stronger) of a basicProduction building's two options instead of a coin flip.
+      const preferStrong = produces.length > 1 && Math.random() < this.preset.strongUnitBias;
+      const unitTypeId = preferStrong ? produces[produces.length - 1] : produces[Math.floor(Math.random() * produces.length)];
       this.base.tryQueueUnit(role, unitTypeId);
     }
   }
@@ -102,7 +123,7 @@ export class AIController {
 
     if (this.armyState === 'massing') {
       const idleCount = army.filter((u) => !u.target).length;
-      if (idleCount >= ATTACK_ARMY_SIZE) {
+      if (idleCount >= this.preset.attackArmySize) {
         this.armyState = 'attacking';
         this.attackStartMaxHp = army.reduce((sum, u) => sum + u.maxHp, 0);
         for (const u of army) u.moveTo(this.enemyBasePosition);
@@ -116,7 +137,7 @@ export class AIController {
         return;
       }
       const currentHp = army.reduce((sum, u) => sum + u.hp, 0);
-      if (currentHp / Math.max(this.attackStartMaxHp, 1) < RETREAT_HP_FRACTION) {
+      if (currentHp / Math.max(this.attackStartMaxHp, 1) < this.preset.retreatHpFraction) {
         this.armyState = 'retreating';
         for (const u of army) {
           u.setTarget(null);

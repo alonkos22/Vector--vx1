@@ -19,7 +19,7 @@ import { EffectManager } from './game/CombatVFX';
 import { SelectionManager } from './game/Selection';
 import { ConvergenceManager } from './game/Convergence';
 import { FogOfWar } from './game/FogOfWar';
-import { AIController } from './game/ai/AIController';
+import { AIController, type AIDifficulty } from './game/ai/AIController';
 import { SunProximity, type SunProximityStage } from './game/SunProximity';
 import { CoreEnergyWave } from './game/hazards/CoreEnergyWave';
 import { buildRallyFlag } from './game/RallyFlag';
@@ -546,6 +546,57 @@ window.addEventListener('resize', onResize);
 // ---------------------------------------------------------------------------
 
 let matchOver = false;
+let gameStarted = false;
+
+function showStartScreen(): void {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 22px;
+    background: radial-gradient(ellipse at center, rgba(10,16,24,0.9) 0%, rgba(5,7,10,0.98) 100%);
+    font-family: 'Segoe UI', Roboto, sans-serif; z-index: 200;
+  `;
+
+  const title = document.createElement('div');
+  title.textContent = 'VECTOR VX1';
+  title.style.cssText = `
+    font-size: 48px; font-weight: 800; letter-spacing: 8px; color: #9fe8ff;
+    text-shadow: 0 0 24px #4fc3ffaa;
+  `;
+
+  const subtitle = document.createElement('div');
+  subtitle.textContent = "You play Cyber-Nexus. Choose the AI opponent's difficulty to begin.";
+  subtitle.style.cssText = 'font-size: 14px; color: #dff3ffcc;';
+
+  const buttonRow = document.createElement('div');
+  buttonRow.style.cssText = 'display: flex; gap: 14px;';
+
+  const difficulties: Array<{ level: AIDifficulty; label: string }> = [
+    { level: 'easy', label: 'Easy' },
+    { level: 'medium', label: 'Medium' },
+    { level: 'hard', label: 'Hard' },
+  ];
+  for (const { level, label } of difficulties) {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.style.cssText = `
+      font-size: 16px; font-weight: 700; color: #0b0d10;
+      background: linear-gradient(135deg, #9fe8ff, #4fc3ff); border: 1px solid #dff3ff;
+      border-radius: 8px; padding: 14px 30px; cursor: pointer; touch-action: manipulation;
+    `;
+    btn.addEventListener('click', () => {
+      soundManager.unlock();
+      soundManager.playUIClick();
+      aiController.setDifficulty(level);
+      gameStarted = true;
+      overlay.remove();
+    });
+    buttonRow.appendChild(btn);
+  }
+
+  overlay.append(title, subtitle, buttonRow);
+  app.appendChild(overlay);
+}
 
 function showMatchEndScreen(won: boolean): void {
   matchOver = true;
@@ -594,7 +645,7 @@ function animate(): void {
   terrain.update(rawDt);
   coreZone.update(rawDt);
 
-  if (!matchOver) {
+  if (!matchOver && gameStarted) {
     sunProximity.update(dt);
     const sunState = sunProximity.snapshot();
     applySunProximity(sunState.progress, sunState.stage);
@@ -666,4 +717,5 @@ function animate(): void {
   renderer.render(scene, rtsCamera.camera);
 }
 
+showStartScreen();
 animate();
