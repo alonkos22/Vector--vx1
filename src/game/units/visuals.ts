@@ -21,16 +21,15 @@ function buildFluxHarvester(): THREE.Object3D {
     metalness: 0.6,
     roughness: 0.35,
   });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 0.8, 6, 12), material);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.85, 0.75), material);
   body.position.y = 0.9;
   group.add(body);
   const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
   const eye = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), eyeMaterial);
   eye.position.set(0, 1.05, 0.42);
   group.add(eye);
-  const collector = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.05, 6, 14), material);
+  const collector = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.1, 6), material);
   collector.position.y = 0.35;
-  collector.rotation.x = Math.PI / 2;
   group.add(collector);
   return withShadows(group);
 }
@@ -42,7 +41,7 @@ function buildNexusStriker(): THREE.Object3D {
   const limbMaterial = new THREE.MeshStandardMaterial({ color: 0x1c2126, roughness: 0.5, metalness: 0.4 });
   const visorMaterial = new THREE.MeshBasicMaterial({ color: 0x4fe3ff });
 
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.75, 4, 10), chrome);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.85, 0.36), chrome);
   torso.position.y = 1.05;
   group.add(torso);
 
@@ -80,7 +79,7 @@ function buildTeslaArchon(): THREE.Object3D {
   });
   const coreMaterial = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
 
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 0.9, 4, 10), chrome);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.0, 0.6), chrome);
   torso.position.y = 1.35;
   group.add(torso);
 
@@ -119,11 +118,11 @@ function buildNaniteWeaver(): THREE.Object3D {
     metalness: 0,
   });
 
-  const globe = new THREE.Mesh(new THREE.SphereGeometry(0.4, 14, 12), glassMaterial);
+  const globe = new THREE.Mesh(new THREE.OctahedronGeometry(0.48, 0), glassMaterial);
   globe.position.y = 1.1;
   group.add(globe);
 
-  const shell = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 6, 16), chrome);
+  const shell = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 6, 6), chrome);
   shell.position.y = 1.1;
   shell.rotation.x = Math.PI / 2.4;
   group.add(shell);
@@ -194,7 +193,7 @@ function buildStormGridColossus(): THREE.Object3D {
     metalness: 0.1,
   });
 
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.6, 1.0, 4, 10), chrome);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.15, 0.75), chrome);
   torso.position.y = 1.9;
   group.add(torso);
 
@@ -1015,7 +1014,8 @@ function buildVerdantDevourer(): THREE.Object3D {
 function buildHuskDrifter(): THREE.Object3D {
   const group = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({ color: 0x2a1a3a, emissive: 0x9f6fd0, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.25 });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.6, 6, 10), material);
+  const body = new THREE.Mesh(new THREE.OctahedronGeometry(0.55, 0), material);
+  body.scale.set(1, 1.15, 0.85);
   body.position.y = 0.75;
   group.add(body);
   const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xd94fd9 });
@@ -1039,12 +1039,13 @@ function buildShadeStalker(): THREE.Object3D {
   const glowMaterial = new THREE.MeshBasicMaterial({ color: 0xd94fd9 });
   const clawMaterial = new THREE.MeshStandardMaterial({ color: 0x7a3fb0, emissive: 0x7a3fb0, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.2 });
 
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.55, 4, 8), shadowMaterial);
+  const torso = new THREE.Mesh(new THREE.OctahedronGeometry(0.35, 0), shadowMaterial);
+  torso.scale.set(0.85, 1.3, 0.7);
   torso.position.y = 0.85;
   torso.rotation.x = 0.2;
   group.add(torso);
 
-  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 6), shadowMaterial);
+  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 5), shadowMaterial);
   hood.position.set(0, 1.25, 0.05);
   group.add(hood);
 
@@ -1069,11 +1070,11 @@ function buildNullweaver(): THREE.Object3D {
   const robeMaterial = new THREE.MeshStandardMaterial({ color: 0x2a1a3a, roughness: 0.35, metalness: 0.25 });
   const shardMaterial = new THREE.MeshStandardMaterial({ color: 0x9f6fd0, emissive: 0x9f6fd0, emissiveIntensity: 0.9, transparent: true, opacity: 0.75, roughness: 0.1, metalness: 0.2 });
 
-  const body = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.1, 8), robeMaterial);
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.1, 5), robeMaterial);
   body.position.y = 0.9;
   group.add(body);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), robeMaterial);
+  const head = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), robeMaterial);
   head.position.y = 1.6;
   group.add(head);
 
@@ -1149,10 +1150,11 @@ function buildShadeLegion(): THREE.Object3D {
     [0.4, -0.15],
   ];
   for (const [x, z] of offsets) {
-    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.5, 4, 8), shadowMaterial);
+    const torso = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), shadowMaterial);
+    torso.scale.set(0.85, 1.3, 0.7);
     torso.position.set(x, 0.8, z);
     group.add(torso);
-    const hood = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.35, 6), shadowMaterial);
+    const hood = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.35, 5), shadowMaterial);
     hood.position.set(x, 1.15, z + 0.05);
     group.add(hood);
     const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 6), glowMaterial);

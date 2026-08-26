@@ -268,6 +268,7 @@ export class PlayerBase {
       color: recipe.color,
       materialRoughness: recipe.materialRoughness,
       materialMetalness: recipe.materialMetalness,
+      shapeFamily: heavy.config.shapeFamily,
       produces: recipe.produces,
       dropoffResource: null,
     };
