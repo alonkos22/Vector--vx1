@@ -4,6 +4,7 @@ import { BUILDING_FUSION_ROLE_BY_ID } from '../config/buildingFusion';
 import type { Targetable } from './Targetable';
 import { HealthBar } from './HealthBar';
 import { buildBuildingVisual, BUILDING_TOP_HEIGHT_FACTOR } from './buildingVisuals';
+import { soundManager } from './SoundManager';
 
 const MAX_QUEUE_SIZE = 5;
 
@@ -82,6 +83,7 @@ export class Building implements Targetable {
         this.material.transparent = false;
         this.material.emissiveIntensity = 0.35;
         this.mesh.scale.setScalar(1);
+        soundManager.playBuildingComplete();
       }
       return;
     }

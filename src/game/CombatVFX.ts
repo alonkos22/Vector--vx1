@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { AttackVfxStyle } from '../config/factions';
+import { soundManager } from './SoundManager';
 
 interface ActiveEffect {
   life: number;
@@ -39,6 +40,7 @@ export class EffectManager {
    */
   spawnAttackHit(style: AttackVfxStyle, from: THREE.Vector3, to: THREE.Vector3, powerScale = 1): void {
     this.attackHitHandlers[style](from, to, powerScale);
+    soundManager.playHit(style, powerScale);
   }
 
   /** Cyber-Nexus attack VFX per §6: thin neon-blue laser line + a small impact flash. */
@@ -379,6 +381,7 @@ export class EffectManager {
 
   /** Cyber-Nexus Synchronization payoff per §6: a sharp, fast glitch-burst merge. */
   spawnSynchronizationBurst(center: THREE.Vector3): void {
+    soundManager.playFusion();
     const point = center.clone();
     point.y = 1.2;
 
@@ -430,6 +433,7 @@ export class EffectManager {
 
   /** Cyber-Nexus building-death VFX per §6: the structure disassembles into blue pixel squares that dissolve upward. Weightier than a unit death. */
   spawnBuildingDestroyed(center: THREE.Vector3, radius: number): void {
+    soundManager.playBuildingDestroyed();
     const point = center.clone();
     point.y = radius * 0.6;
 

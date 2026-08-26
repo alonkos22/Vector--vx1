@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { pathGrid } from '../Pathfinding';
 import { registerUnit, unregisterUnit, allUnits } from './UnitRegistry';
+import { soundManager } from '../SoundManager';
 
 let nextUnitId = 1;
 
@@ -101,6 +102,7 @@ export abstract class Unit {
     });
 
     registerUnit(this);
+    soundManager.playSpawn();
   }
 
   setSelected(value: boolean): void {
@@ -156,6 +158,7 @@ export abstract class Unit {
     this.dying = true;
     this.deathTimer = instant ? 0 : DEATH_ANIM_DURATION;
     this.destroy();
+    if (!instant) soundManager.playDeath();
   }
 
   /** Call every frame once `beginDeath` has fired, in place of normal update logic. */

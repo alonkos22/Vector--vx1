@@ -25,6 +25,10 @@ import { CoreEnergyWave } from './game/hazards/CoreEnergyWave';
 import { buildRallyFlag } from './game/RallyFlag';
 import { HUD, type HUDPanelState } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
+import { soundManager } from './game/SoundManager';
+
+window.addEventListener('pointerdown', () => soundManager.unlock(), { once: true });
+window.addEventListener('keydown', () => soundManager.unlock(), { once: true });
 
 function formatCost(costCoreEnergy: number, costFactionResource: number, buildTimeSec: number): string {
   const parts: string[] = [];
@@ -547,6 +551,8 @@ function showMatchEndScreen(won: boolean): void {
   matchOver = true;
   hud.setStatus('');
   cancelPlacement();
+  if (won) soundManager.playVictory();
+  else soundManager.playDefeat();
 
   const overlay = document.createElement('div');
   overlay.style.cssText = `

@@ -1,4 +1,5 @@
 import type { BuildingRole } from '../config/buildings';
+import { soundManager } from '../game/SoundManager';
 
 export interface HUDUnitDef {
   unitId: string;
@@ -175,6 +176,7 @@ export class HUD {
       cursor: pointer; touch-action: manipulation; padding: 0;
     `;
     tile.addEventListener('click', () => {
+      soundManager.playUIClick();
       this.openRole = this.openRole === role ? null : role;
       this.applyOpenState();
     });
@@ -402,6 +404,7 @@ function styleCompactButton(button: HTMLButtonElement): void {
     border-radius: 4px; padding: 8px 10px; cursor: pointer;
     min-height: 34px; touch-action: manipulation;
   `;
+  button.addEventListener('click', () => soundManager.playUIClick());
   button.addEventListener('mouseenter', () => {
     if (!button.disabled) button.style.background = 'rgba(46,163,255,0.32)';
   });
