@@ -1,3 +1,5 @@
+import { tierCostMultiplier, tierBuildTimeMultiplier, tierPowerMultiplier } from './factionTiers';
+
 /**
  * Per-faction unit definitions, matching the detailed unit catalog (Nexus
  * Striker, Tesla Archon, Nanite Weaver, ...). `combat` stats (hp/damage/
@@ -52,7 +54,8 @@ export interface UnitConfig {
   combat?: CombatStats;
 }
 
-export const UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
+/** Written at Cyber-Nexus's tier (tier 4, the unscaled baseline) — see config/factionTiers.ts for how every other faction's copy gets scaled from these numbers. */
+const RAW_UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
   'cyber-nexus': {
     'flux-harvester': {
       id: 'flux-harvester',
@@ -576,6 +579,32 @@ export const UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
     },
   },
 };
+
+/** Applies this faction's tier scaling (config/factionTiers.ts) to one unit's stats — hp/damage scale by the combat-power step, cost/build time by their own shallower steps. Economy units (no `combat`) only get the cost/build-time scaling. */
+function applyFactionTier(factionId: string, config: UnitConfig): UnitConfig {
+  const costMult = tierCostMultiplier(factionId);
+  const scaled: UnitConfig = {
+    ...config,
+    costCoreEnergy: Math.round(config.costCoreEnergy * costMult),
+    costFactionResource: Math.round(config.costFactionResource * costMult),
+    buildTimeSec: Math.round(config.buildTimeSec * tierBuildTimeMultiplier(factionId) * 10) / 10,
+  };
+  if (!config.combat) return scaled;
+  const powerMult = tierPowerMultiplier(factionId);
+  scaled.combat = {
+    ...config.combat,
+    hp: Math.round(config.combat.hp * powerMult),
+    damage: Math.round(config.combat.damage * powerMult * 10) / 10,
+  };
+  return scaled;
+}
+
+export const UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = Object.fromEntries(
+  Object.entries(RAW_UNITS_BY_FACTION).map(([factionId, units]) => [
+    factionId,
+    Object.fromEntries(Object.entries(units).map(([unitId, config]) => [unitId, applyFactionTier(factionId, config)])),
+  ]),
+);
 
 /** Flat id-keyed view for Cyber-Nexus, kept for the player-facing UI which always plays Cyber-Nexus. */
 export const CYBER_NEXUS_UNITS: Record<string, UnitConfig> = UNITS_BY_FACTION['cyber-nexus'];

@@ -1,3 +1,5 @@
+import { tierCostMultiplier, tierBuildTimeMultiplier, tierPowerMultiplier } from './factionTiers';
+
 /**
  * Per-faction building definitions. Every faction defines exactly the same
  * four canonical roles (main structure, resource dropoff, basic production,
@@ -41,7 +43,8 @@ export interface BuildingConfig {
   dropoffResource: 'coreEnergy' | 'factionResource' | null;
 }
 
-export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingConfig>> = {
+/** Written at Cyber-Nexus's tier (tier 4, the unscaled baseline) — see config/factionTiers.ts for how every other faction's copy gets scaled from these numbers. */
+const RAW_BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingConfig>> = {
   'cyber-nexus': {
     main: {
       id: 'nexus-core',
@@ -444,6 +447,25 @@ export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingC
     },
   },
 };
+
+/** Applies this faction's tier scaling (config/factionTiers.ts): cost/build time by their shallow steps, maxHp by the same combat-power step units' hp/damage use ("stronger defenses" per user request — buildings have no attack stat to scale). */
+function applyFactionTier(factionId: string, config: BuildingConfig): BuildingConfig {
+  const costMult = tierCostMultiplier(factionId);
+  return {
+    ...config,
+    costCoreEnergy: Math.round(config.costCoreEnergy * costMult),
+    costFactionResource: Math.round(config.costFactionResource * costMult),
+    buildTimeSec: Math.round(config.buildTimeSec * tierBuildTimeMultiplier(factionId) * 10) / 10,
+    maxHp: Math.round(config.maxHp * tierPowerMultiplier(factionId)),
+  };
+}
+
+export const BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingConfig>> = Object.fromEntries(
+  Object.entries(RAW_BUILDINGS_BY_FACTION).map(([factionId, byRole]) => [
+    factionId,
+    Object.fromEntries(BUILDING_ROLES.map((role) => [role, applyFactionTier(factionId, byRole[role])])) as Record<BuildingRole, BuildingConfig>,
+  ]),
+);
 
 /** Flat id-keyed view for Cyber-Nexus, kept for the player-facing UI which always plays Cyber-Nexus. */
 export const CYBER_NEXUS_BUILDINGS: Record<string, BuildingConfig> = Object.fromEntries(

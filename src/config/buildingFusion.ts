@@ -1,4 +1,5 @@
 import type { BuildingRole } from './buildings';
+import { tierCostMultiplier, tierBuildTimeMultiplier, tierPowerMultiplier } from './factionTiers';
 
 /**
  * Building Fusion (per user request): a physical merge of the
@@ -26,7 +27,8 @@ export interface BuildingFusionRecipe {
   produces: string[];
 }
 
-export const BUILDING_FUSION_BY_FACTION: Record<string, BuildingFusionRecipe> = {
+/** Written at Cyber-Nexus's tier (tier 4, the unscaled baseline) — see config/factionTiers.ts. */
+const RAW_BUILDING_FUSION_BY_FACTION: Record<string, BuildingFusionRecipe> = {
   'cyber-nexus': {
     id: 'nexus-foundry',
     name: 'Nexus Foundry',
@@ -112,6 +114,20 @@ export const BUILDING_FUSION_BY_FACTION: Record<string, BuildingFusionRecipe> = 
     produces: ['shade-stalker', 'nullweaver', 'voidmaw-horror'],
   },
 };
+
+/** Cost/build-time by their shallow steps, maxHp by the same power step buildings.ts uses (see config/factionTiers.ts). */
+export const BUILDING_FUSION_BY_FACTION: Record<string, BuildingFusionRecipe> = Object.fromEntries(
+  Object.entries(RAW_BUILDING_FUSION_BY_FACTION).map(([factionId, recipe]) => [
+    factionId,
+    {
+      ...recipe,
+      extraCoreEnergyCost: Math.round(recipe.extraCoreEnergyCost * tierCostMultiplier(factionId)),
+      extraFactionResourceCost: Math.round(recipe.extraFactionResourceCost * tierCostMultiplier(factionId)),
+      buildTimeSec: Math.round(recipe.buildTimeSec * tierBuildTimeMultiplier(factionId) * 10) / 10,
+      maxHp: Math.round(recipe.maxHp * tierPowerMultiplier(factionId)),
+    },
+  ]),
+);
 
 /** Every fusion result renders as the heavyProduction archetype (bigger box + twin towers) — a visibly "upgraded" silhouette. */
 export const BUILDING_FUSION_ROLE_BY_ID: Record<string, BuildingRole> = Object.fromEntries(

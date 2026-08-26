@@ -1,3 +1,5 @@
+import { tierCostMultiplier, tierBuildTimeMultiplier } from './factionTiers';
+
 /**
  * Convergence (fusion) recipes, per design doc §3. Data-driven and
  * faction-agnostic: "N units of type X [+ M of type Y] [near a structure]
@@ -27,7 +29,8 @@ export interface ConvergenceRecipe {
   requiresBuildingRadius: number;
 }
 
-export const CONVERGENCE_BY_FACTION: Record<string, ConvergenceRecipe[]> = {
+/** Written at Cyber-Nexus's tier (tier 4, the unscaled baseline) — see config/factionTiers.ts. */
+const RAW_CONVERGENCE_BY_FACTION: Record<string, ConvergenceRecipe[]> = {
   'cyber-nexus': [
     {
       id: 'hive-construct',
@@ -178,6 +181,18 @@ export const CONVERGENCE_BY_FACTION: Record<string, ConvergenceRecipe[]> = {
     },
   ],
 };
+
+/** The extra Core Energy and channel time to actually perform a fusion scale with faction tier too (cost/build-time steps — see config/factionTiers.ts) — the output unit's own stats are already tiered via units.ts. */
+export const CONVERGENCE_BY_FACTION: Record<string, ConvergenceRecipe[]> = Object.fromEntries(
+  Object.entries(RAW_CONVERGENCE_BY_FACTION).map(([factionId, recipes]) => [
+    factionId,
+    recipes.map((recipe) => ({
+      ...recipe,
+      extraCoreEnergyCost: Math.round(recipe.extraCoreEnergyCost * tierCostMultiplier(factionId)),
+      channelTimeSec: Math.round(recipe.channelTimeSec * tierBuildTimeMultiplier(factionId) * 10) / 10,
+    })),
+  ]),
+);
 
 /** Kept for the player-facing UI which always plays Cyber-Nexus. */
 export const CYBER_NEXUS_CONVERGENCE: ConvergenceRecipe[] = CONVERGENCE_BY_FACTION['cyber-nexus'];
