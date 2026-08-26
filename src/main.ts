@@ -33,9 +33,15 @@ import { HUD, type HUDPanelState } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
 import { ControlGroupBar } from './ui/ControlGroupBar';
 import { soundManager } from './game/SoundManager';
+import { preloadImportedUnitModels } from './game/ImportedUnitModels';
 
 window.addEventListener('pointerdown', () => soundManager.unlock(), { once: true });
 window.addEventListener('keydown', () => soundManager.unlock(), { once: true });
+
+// Kicked off as early as possible (page load, well before any match starts) so the imported unit models
+// (see ImportedUnitModels.ts) are ready by the time a player can queue their first Shade Stalker, Solar
+// Zealot, or Flux Harvester.
+preloadImportedUnitModels();
 
 function formatCost(costCoreEnergy: number, costFactionResource: number, buildTimeSec: number): string {
   const parts: string[] = [];
@@ -376,6 +382,11 @@ function hideNodeInfo(): void {
   nodeInfoPanel.style.display = 'none';
 }
 
+// Any new interaction dismisses the info panel — not just clicks on the 3D viewport below, but HUD tile
+// taps (e.g. opening a building tray) too, which never reach that handler. It reopens right away if the
+// interaction turns out to be another tap on a resource node (handled by the click listener below).
+window.addEventListener('pointerdown', () => hideNodeInfo());
+
 renderer.domElement.addEventListener('click', (e) => {
   if (placementTarget) {
     const point = screenToGround(e.clientX, e.clientY);
@@ -412,6 +423,7 @@ window.addEventListener('keydown', (e) => {
   if (placementTarget) cancelPlacement();
   if (rallyTarget) cancelRally();
   hideOrderChoice();
+  hideNodeInfo();
 });
 
 // ---------------------------------------------------------------------------
@@ -613,6 +625,13 @@ function showOrderChoice(clientX: number, clientY: number, target: Targetable, u
   orderChoicePopup.style.display = 'flex';
 }
 
+/** After a manual harvester order (per user request): deselect it right away, so a later tap elsewhere isn't misread as yet another order redirecting the same still-selected harvester. Combat units deliberately stay selected after an order — that's the useful default for following up on a fight. */
+function deselectHarvesters(harvesters: FluxHarvester[]): void {
+  if (harvesters.length === 0) return;
+  for (const harvester of harvesters) selection.deselect(harvester);
+  updateSelectionHUD();
+}
+
 function issueOrderAt(clientX: number, clientY: number): void {
   if (placementTarget) return;
   const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
@@ -627,14 +646,20 @@ function issueOrderAt(clientX: number, clientY: number): void {
   }
 
   const node = selectedHarvesters.length > 0 ? pickResourceNodeAt(clientX, clientY) : null;
-  if (node) for (const harvester of selectedHarvesters) playerBase.manualAssignHarvester(harvester, node);
+  if (node) {
+    for (const harvester of selectedHarvesters) playerBase.manualAssignHarvester(harvester, node);
+    deselectHarvesters(selectedHarvesters);
+  }
 
   if (target && node) return;
 
   const point = screenToGround(clientX, clientY);
   if (!point) return;
   if (selectedCombat.length > 0 && !target) issueMoveOrderAtPoint(point, selectedCombat);
-  if (selectedHarvesters.length > 0 && !node) for (const harvester of selectedHarvesters) harvester.orderMoveTo(point);
+  if (selectedHarvesters.length > 0 && !node) {
+    for (const harvester of selectedHarvesters) harvester.orderMoveTo(point);
+    deselectHarvesters(selectedHarvesters);
+  }
 }
 
 /** Formation move order to a known ground point — shared by the main viewport's right-click and the minimap's right-click, which has no screen-space raycast to pick an attack target or resource node from and so is always a plain move order. */
@@ -646,7 +671,10 @@ function issueMoveOrderAtPoint(point: THREE.Vector3, selectedCombat: CombatUnit[
       unit.moveTo(point.clone().add(offsets[i]));
     });
   }
-  for (const harvester of selectedHarvesters) harvester.orderMoveTo(point);
+  if (selectedHarvesters.length > 0) {
+    for (const harvester of selectedHarvesters) harvester.orderMoveTo(point);
+    deselectHarvesters(selectedHarvesters);
+  }
 }
 
 /**

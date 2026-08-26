@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getImportedUnitModel } from '../ImportedUnitModels';
 
 function withShadows(object: THREE.Object3D): THREE.Object3D {
   object.traverse((child) => {
@@ -13,6 +14,9 @@ function withShadows(object: THREE.Object3D): THREE.Object3D {
 // ---------------------------------------------------------------------------
 
 function buildFluxHarvester(): THREE.Object3D {
+  const imported = getImportedUnitModel('flux-harvester');
+  if (imported) return imported;
+
   const group = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({
     color: 0x4fc3ff,
@@ -433,6 +437,9 @@ function buildObsidianChimera(): THREE.Object3D {
 
 /** Solar Zealot: slender floating gold-armored warrior, dual wrist-mounted violet plasma blades, faceless gold helmet. */
 function buildSolarZealot(): THREE.Object3D {
+  const imported = getImportedUnitModel('solar-zealot');
+  if (imported) return imported;
+
   const group = new THREE.Group();
   const goldMaterial = new THREE.MeshStandardMaterial({ color: 0xf4c542, emissive: 0xd9a834, emissiveIntensity: 0.5, roughness: 0.25, metalness: 0.7 });
   const bladeMaterial = new THREE.MeshBasicMaterial({ color: 0xb27bff });
@@ -1034,6 +1041,9 @@ function buildHuskDrifter(): THREE.Object3D {
 
 /** Shade Stalker: lean crouched shadow-assassin, jagged crystal claws, no visible face beneath a hooded void-mist head. */
 function buildShadeStalker(): THREE.Object3D {
+  const imported = getImportedUnitModel('shade-stalker');
+  if (imported) return imported;
+
   const group = new THREE.Group();
   const shadowMaterial = new THREE.MeshStandardMaterial({ color: 0x1a0f28, roughness: 0.4, metalness: 0.2 });
   const glowMaterial = new THREE.MeshBasicMaterial({ color: 0xd94fd9 });

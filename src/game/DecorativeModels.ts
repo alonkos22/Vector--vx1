@@ -3,12 +3,13 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { OccupiedRegion } from './TerrainFeatures';
 import bambooUrl from '../assets/models/bamboo.glb';
 import sandUrl from '../assets/models/sand_dune.glb';
+import cliffRockUrl from '../assets/models/cliff-rock.glb';
 
 /**
  * Purely decorative environment props, built from user-supplied 3D scans
- * (a bamboo grove, a dune terrain scan) that were flattened to plain
- * geometry with the game's existing flat-color palette (no photoreal
- * textures — see the asset-prep notes in src/assets/models/). Scattered
+ * (a bamboo grove, a dune terrain scan, a cliff rock formation) that were
+ * flattened to plain geometry with the game's existing flat-color palette
+ * (no photoreal textures — see the asset-prep notes in src/assets/models/). Scattered
  * across the whole arena with a randomized count, scale, and rotation each
  * match (per user request: "not always the same amount"), so no two
  * matches look identical. Not registered with pathfinding or the
@@ -80,4 +81,9 @@ export function loadDecorativeModels(scene: THREE.Scene, mapHalfExtent: number, 
   const bambooCount = 6 + Math.floor(Math.random() * 9);
   const bambooPoints = scatterPoints(bambooCount, mapHalfExtent, 10, 18, keepClearOf);
   loadInstances(bambooUrl, scene, bambooPoints, [0.12, 0.22], 1);
+
+  // Cliff rock spires: rare, dramatic landmarks — kept sparse and well spread out.
+  const cliffCount = 3 + Math.floor(Math.random() * 5);
+  const cliffPoints = scatterPoints(cliffCount, mapHalfExtent, 15, 25, keepClearOf);
+  loadInstances(cliffRockUrl, scene, cliffPoints, [0.15, 0.35], 1);
 }
