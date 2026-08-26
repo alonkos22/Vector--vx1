@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BUILDING_ROLE_BY_ID, type BuildingConfig } from '../config/buildings';
+import { BUILDING_ROLE_BY_ID, type BuildingConfig, type BuildingRole } from '../config/buildings';
 import { BUILDING_FUSION_ROLE_BY_ID } from '../config/buildingFusion';
 import type { Targetable } from './Targetable';
 import { HealthBar } from './HealthBar';
@@ -17,6 +17,7 @@ interface QueuedItem {
 /** A placed building: handles the under-construction visual, a multi-item FIFO production queue, and (once built) HP as a Targetable. */
 export class Building implements Targetable {
   readonly config: BuildingConfig;
+  readonly role: BuildingRole;
   readonly ownerId: string;
   readonly mesh: THREE.Group;
   readonly position: THREE.Vector3;
@@ -39,6 +40,7 @@ export class Building implements Targetable {
     this.hp = config.maxHp;
 
     const role = BUILDING_ROLE_BY_ID[config.id] ?? BUILDING_FUSION_ROLE_BY_ID[config.id];
+    this.role = role;
     const { group, material } = buildBuildingVisual(
       role,
       config.footprint,

@@ -69,6 +69,11 @@ export class FluxHarvester extends Unit implements Targetable {
     return this.node?.type ?? null;
   }
 
+  /** The specific node this harvester is assigned to (for a node info panel: "N harvesters working this node"), distinct from currentNodeType()'s type-only answer. */
+  currentNode(): ResourceNode | null {
+    return this.node;
+  }
+
   /** Called on selection: freezes the autonomous gather loop and starts the grace window, so a tap-select doesn't immediately walk the harvester off before an order can be given. */
   pauseForOrder(): void {
     if (!this.isAlive() || this.paused) return;

@@ -15,6 +15,9 @@ const AGGRO_RANGE_BONUS = 5;
 const LUNGE_DURATION_SEC = 0.18;
 const LUNGE_DISTANCE = 0.28;
 
+/** How far beyond attack range a "watch" order holds — close enough to keep eyes on the target, far enough to stay out of the fight (per user request). */
+const WATCH_RANGE_BONUS = 6;
+
 /** Damage bonus for attacking from a plateau down onto a target on lower ground (per user request: fortify on high ground). */
 const HIGH_GROUND_DAMAGE_MULTIPLIER = 1.25;
 
@@ -53,6 +56,8 @@ export class CombatUnit extends Unit implements Targetable {
   maxHp: number;
   hp: number;
   target: Targetable | null = null;
+  /** "Watch" order (per user request): a non-aggressive scouting stance — approaches to just outside attack range and holds there, never engaging on its own. Distinct from `target`, which always means "attack". */
+  private watchTarget: Targetable | null = null;
 
   private damage: number;
   private readonly baseMaxHp: number;
@@ -152,7 +157,20 @@ export class CombatUnit extends Unit implements Targetable {
 
   setTarget(target: Targetable | null): void {
     this.target = target;
+    this.watchTarget = null;
     this.state = 'idle';
+  }
+
+  /** "Watch" order (vs. setTarget's "attack"): approaches to just outside attack range and holds there without engaging — a scouting stance, per user request the game offers as a choice alongside attack. */
+  setWatchTarget(target: Targetable): void {
+    this.target = null;
+    this.watchTarget = target;
+    this.state = 'idle';
+    const away = new THREE.Vector3().subVectors(this.position, target.position);
+    if (away.lengthSq() < 0.0001) away.set(1, 0, 0);
+    away.normalize();
+    const holdPoint = target.position.clone().addScaledVector(away, this.attackRange + WATCH_RANGE_BONUS);
+    this.moveTo(holdPoint);
   }
 
   /** Marks this unit as consumed by a Convergence fusion: freezes it in place for the channel duration. */
@@ -184,8 +202,10 @@ export class CombatUnit extends Unit implements Targetable {
 
     this.lastCandidates = targetCandidates;
     if (this.target && !this.target.isAlive()) this.target = null;
+    if (this.watchTarget && !this.watchTarget.isAlive()) this.watchTarget = null;
 
-    if (!this.target && !this.isMoving()) {
+    // A watching unit never auto-engages — that's the entire point of the stance (per user request).
+    if (!this.target && !this.watchTarget && !this.isMoving()) {
       this.target = acquireTarget(this.position, this.ownerId, targetCandidates, 'nearest', this.aggroRange);
     }
 
@@ -200,6 +220,9 @@ export class CombatUnit extends Unit implements Targetable {
         this.tickAttack(dt);
         this.tickLunge(dt);
       }
+    } else if (this.watchTarget) {
+      this.updateMovement(dt);
+      if (!this.isMoving()) this.faceTarget(this.watchTarget.position, dt);
     } else {
       this.updateMovement(dt);
     }

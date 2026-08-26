@@ -278,6 +278,12 @@ export class HUD {
     this.applyOpenState();
   }
 
+  /** Opens a building's tray directly — used when the player clicks the building's own 3D model in the scene, not just its bottom-bar tile, so "click the building to see its data" works either way. */
+  openTray(role: BuildingRole): void {
+    this.openRole = role;
+    this.applyOpenState();
+  }
+
   private applyOpenState(): void {
     for (const [role, tray] of this.trays) {
       tray.tray.style.display = this.openRole === role ? 'flex' : 'none';

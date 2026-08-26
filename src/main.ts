@@ -10,6 +10,7 @@ import { UNITS_BY_FACTION, type UnitConfig } from './config/units';
 import { CONVERGENCE_BY_FACTION } from './config/convergence';
 import { BUILDING_FUSION_BY_FACTION } from './config/buildingFusion';
 import { PlayerBase } from './game/PlayerBase';
+import type { Building } from './game/Building';
 import { CombatUnit } from './game/units/CombatUnit';
 import { FluxHarvester } from './game/units/FluxHarvester';
 import { TrainingDummy } from './game/units/TrainingDummy';
@@ -342,20 +343,68 @@ renderer.domElement.addEventListener('mousemove', (e) => {
   }
 });
 
+/** Info panel for a clicked resource node (per user request: know what each node is and how to harvest it more efficiently) — type, how much is left, how many of the player's own harvesters are already working it, and the distance to the nearest matching dropoff building (closer = shorter round trips = more throughput). */
+const nodeInfoPanel = document.createElement('div');
+nodeInfoPanel.style.cssText = `
+  position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+  background: rgba(10,16,24,0.92); border: 1px solid #2ea3ff55; border-radius: 6px;
+  padding: 8px 14px; font-family: 'Segoe UI', Roboto, sans-serif; font-size: 12px;
+  color: #dff3ff; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none;
+  display: none; z-index: 50; text-align: center; user-select: none;
+`;
+app.appendChild(nodeInfoPanel);
+
+function showNodeInfo(node: ResourceNode): void {
+  const resourceName = node.type === 'coreEnergy' ? 'Core Energy' : FACTION.factionResourceName;
+  const workingCount = playerBase.harvesters.filter((h) => h.currentNode() === node).length;
+  const dropoff = node.type === 'coreEnergy' ? playerBase.mainBuilding : playerBase.getBuildingByRole('resourceDropoff');
+  const dropoffLine = dropoff
+    ? `${Math.round(node.position.distanceTo(dropoff.position))}m from ${dropoff.config.name} — closer dropoffs mean faster round trips`
+    : `Build a dropoff for ${resourceName} to start collecting it`;
+  nodeInfoPanel.innerHTML = `<b>${resourceName} deposit</b> — ${Math.ceil(node.remaining)} remaining<br>${workingCount} harvester${workingCount === 1 ? '' : 's'} working it · ${dropoffLine}`;
+  nodeInfoPanel.style.display = 'block';
+}
+
+function hideNodeInfo(): void {
+  nodeInfoPanel.style.display = 'none';
+}
+
 renderer.domElement.addEventListener('click', (e) => {
   if (placementTarget) {
     const point = screenToGround(e.clientX, e.clientY);
     if (point) confirmPlacement(point);
-  } else if (rallyTarget) {
+    return;
+  }
+  if (rallyTarget) {
     const point = screenToGround(e.clientX, e.clientY);
     if (point) confirmRally(point);
+    return;
   }
+
+  // Click the building/node's own 3D model (per user request: see its full data without hunting for the right bottom-bar tile) — checked before falling through to normal unit selection.
+  const building = pickOwnBuildingAt(e.clientX, e.clientY);
+  if (building) {
+    hud.openTray(building.role);
+    hideNodeInfo();
+    return;
+  }
+  const node = pickResourceNodeAt(e.clientX, e.clientY);
+  if (node) {
+    showNodeInfo(node);
+    return;
+  }
+  hideNodeInfo();
+  // On touch, this synthesized 'click' fires right after the pointerup that may have just opened the
+  // attack/watch popup via handleTouchTap — don't let it immediately close what it just opened.
+  if (suppressNextClickHide) suppressNextClickHide = false;
+  else hideOrderChoice();
 });
 
 window.addEventListener('keydown', (e) => {
   if (e.code !== 'Escape') return;
   if (placementTarget) cancelPlacement();
   if (rallyTarget) cancelRally();
+  hideOrderChoice();
 });
 
 // ---------------------------------------------------------------------------
@@ -477,6 +526,86 @@ function pickResourceNodeAt(clientX: number, clientY: number): ResourceNode | nu
   return null;
 }
 
+/** Raycast against the player's own buildings — for clicking a building's own 3D model to open its tray, the same data a bottom-bar tile tap shows. */
+function pickOwnBuildingAt(clientX: number, clientY: number): Building | null {
+  const ndc = new THREE.Vector2((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, rtsCamera.camera);
+  const hits = raycaster.intersectObjects(
+    playerBase.allBuildings().map((b) => b.mesh),
+    true,
+  );
+  for (const hit of hits) {
+    let obj: THREE.Object3D | null = hit.object;
+    while (obj) {
+      const ref = obj.userData.buildingRef as Building | undefined;
+      if (ref) return ref;
+      obj = obj.parent;
+    }
+  }
+  return null;
+}
+
+/**
+ * Attack-vs-watch choice popup (per user request): ordering selected combat
+ * units onto an enemy doesn't commit to a fight immediately — it asks
+ * "Attack" (close in and fight) or "Watch" (hold just outside attack range,
+ * a non-aggressive scouting stance). Appears at the click point; picking
+ * either option applies it to every pending unit, and it's dismissed
+ * (order cancelled) by clicking anywhere else.
+ */
+let pendingAttackTarget: Targetable | null = null;
+let pendingAttackUnits: CombatUnit[] = [];
+/** Guards the popup from being closed by the same touch gesture that just opened it (see the main viewport's 'click' handler). */
+let suppressNextClickHide = false;
+
+const orderChoicePopup = document.createElement('div');
+orderChoicePopup.style.cssText = `
+  position: absolute; display: none; flex-direction: row; gap: 6px; z-index: 60;
+  background: rgba(10,16,24,0.95); border: 1px solid #2ea3ff88; border-radius: 8px; padding: 6px;
+  font-family: 'Segoe UI', Roboto, sans-serif; pointer-events: auto;
+`;
+app.appendChild(orderChoicePopup);
+
+function makeOrderChoiceButton(label: string, background: string): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.textContent = label;
+  btn.style.cssText = `
+    font-size: 13px; font-weight: 700; color: #0b0d10; white-space: nowrap;
+    background: ${background}; border: 1px solid #dff3ff; border-radius: 6px;
+    padding: 8px 12px; cursor: pointer; touch-action: manipulation;
+  `;
+  orderChoicePopup.appendChild(btn);
+  return btn;
+}
+
+function hideOrderChoice(): void {
+  orderChoicePopup.style.display = 'none';
+  pendingAttackTarget = null;
+  pendingAttackUnits = [];
+}
+
+const attackChoiceBtn = makeOrderChoiceButton('⚔ Attack', 'linear-gradient(135deg, #ff9f9f, #ff4f4f)');
+attackChoiceBtn.addEventListener('click', () => {
+  soundManager.playUIClick();
+  if (pendingAttackTarget) for (const unit of pendingAttackUnits) unit.setTarget(pendingAttackTarget);
+  hideOrderChoice();
+});
+const watchChoiceBtn = makeOrderChoiceButton('👁 Watch', 'linear-gradient(135deg, #9fe8ff, #4fc3ff)');
+watchChoiceBtn.addEventListener('click', () => {
+  soundManager.playUIClick();
+  if (pendingAttackTarget) for (const unit of pendingAttackUnits) unit.setWatchTarget(pendingAttackTarget);
+  hideOrderChoice();
+});
+
+function showOrderChoice(clientX: number, clientY: number, target: Targetable, units: CombatUnit[]): void {
+  pendingAttackTarget = target;
+  pendingAttackUnits = units;
+  suppressNextClickHide = true;
+  orderChoicePopup.style.left = `${Math.min(clientX, window.innerWidth - 150)}px`;
+  orderChoicePopup.style.top = `${Math.min(clientY, window.innerHeight - 60)}px`;
+  orderChoicePopup.style.display = 'flex';
+}
+
 function issueOrderAt(clientX: number, clientY: number): void {
   if (placementTarget) return;
   const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
@@ -484,7 +613,11 @@ function issueOrderAt(clientX: number, clientY: number): void {
   if (selectedCombat.length === 0 && selectedHarvesters.length === 0) return;
 
   const target = selectedCombat.length > 0 ? pickTargetAt(clientX, clientY) : null;
-  if (target) for (const unit of selectedCombat) unit.setTarget(target);
+  if (target) {
+    showOrderChoice(clientX, clientY, target, selectedCombat);
+  } else {
+    hideOrderChoice();
+  }
 
   const node = selectedHarvesters.length > 0 ? pickResourceNodeAt(clientX, clientY) : null;
   if (node) for (const harvester of selectedHarvesters) playerBase.manualAssignHarvester(harvester, node);
