@@ -18,6 +18,14 @@ const SPAWN_POP_DURATION = 0.25;
 const HIT_FLASH_DURATION = 0.12;
 const HIT_FLASH_INTENSITY_BOOST = 1.6;
 const DEATH_ANIM_DURATION = 0.4;
+
+/** Damage value treated as an "average" hit for scaling hit-flash/VFX/lunge intensity — see computePowerScale. */
+const POWER_REFERENCE_DAMAGE = 20;
+
+/** Normalizes a raw damage value into a 1=average multiplier, clamped so weak hits still register and huge hits don't blow out the effect. */
+export function computePowerScale(damage: number): number {
+  return THREE.MathUtils.clamp(damage / POWER_REFERENCE_DAMAGE, 0.5, 2.2);
+}
 const WALK_BOB_AMPLITUDE = 0.08;
 
 function buildSelectionRing(radius: number): THREE.Mesh {
@@ -55,6 +63,7 @@ export abstract class Unit {
 
   private spawnTimer = SPAWN_POP_DURATION;
   private hitFlashTimer = 0;
+  private hitFlashScale = 1;
   private dying = false;
   private deathTimer = 0;
   private readonly flashMaterials: THREE.MeshStandardMaterial[] = [];
@@ -118,9 +127,11 @@ export abstract class Unit {
     unregisterUnit(this);
   }
 
-  /** Brief emissive-glow pulse on a surviving hit, for damage feedback. */
-  protected triggerHitFlash(): void {
-    this.hitFlashTimer = HIT_FLASH_DURATION;
+  /** Brief emissive-glow pulse on a surviving hit, for damage feedback. `damage` (the raw hit amount) scales both the flash intensity and how long it lingers, so a heavy hit visibly lands harder than a scratch. */
+  protected triggerHitFlash(damage: number): void {
+    const scale = computePowerScale(damage);
+    this.hitFlashScale = scale;
+    this.hitFlashTimer = HIT_FLASH_DURATION * THREE.MathUtils.clamp(scale, 1, 1.6);
   }
 
   /** Spawn pop-in scale and hit-flash decay — call every frame regardless of alive/dead state. */
@@ -132,8 +143,9 @@ export abstract class Unit {
     }
 
     if (this.hitFlashTimer > 0) {
+      const flashDuration = HIT_FLASH_DURATION * THREE.MathUtils.clamp(this.hitFlashScale, 1, 1.6);
       this.hitFlashTimer = Math.max(this.hitFlashTimer - dt, 0);
-      const boost = (this.hitFlashTimer / HIT_FLASH_DURATION) * HIT_FLASH_INTENSITY_BOOST;
+      const boost = (this.hitFlashTimer / flashDuration) * HIT_FLASH_INTENSITY_BOOST * this.hitFlashScale;
       for (let i = 0; i < this.flashMaterials.length; i++) this.flashMaterials[i].emissiveIntensity = this.flashBaseIntensity[i] + boost;
     }
   }

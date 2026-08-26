@@ -43,7 +43,7 @@ export class FluxHarvester extends Unit implements Targetable {
     this.hp = Math.max(0, this.hp - amount);
     this.healthBar.update(this.hp / this.maxHp);
     if (this.hp <= 0) this.beginDeath();
-    else this.triggerHitFlash();
+    else this.triggerHitFlash(amount);
   }
 
   /** (Re)assigns this harvester to a node/dropoff pair and starts the gather loop. */

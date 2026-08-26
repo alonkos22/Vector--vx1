@@ -17,26 +17,32 @@ export class EffectManager {
   private readonly scene: THREE.Scene;
   private readonly active: ActiveEffect[] = [];
 
-  private readonly attackHitHandlers: Record<AttackVfxStyle, (from: THREE.Vector3, to: THREE.Vector3) => void> = {
-    laser: (from, to) => this.spawnLaserHit(from, to),
-    'lava-arc': (from, to) => this.spawnLavaArcHit(from, to),
-    'light-beam': (from, to) => this.spawnLightBeamHit(from, to),
-    projectile: (from, to) => this.spawnProjectileHit(from, to),
-    'spore-burst': (from, to) => this.spawnSporeBurstHit(from, to),
-    'shadow-bolt': (from, to) => this.spawnShadowBoltHit(from, to),
+  private readonly attackHitHandlers: Record<AttackVfxStyle, (from: THREE.Vector3, to: THREE.Vector3, powerScale: number) => void> = {
+    laser: (from, to, p) => this.spawnLaserHit(from, to, p),
+    'lava-arc': (from, to, p) => this.spawnLavaArcHit(from, to, p),
+    'light-beam': (from, to, p) => this.spawnLightBeamHit(from, to, p),
+    projectile: (from, to, p) => this.spawnProjectileHit(from, to, p),
+    'spore-burst': (from, to, p) => this.spawnSporeBurstHit(from, to, p),
+    'shadow-bolt': (from, to, p) => this.spawnShadowBoltHit(from, to, p),
   };
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
   }
 
-  /** Faction-agnostic attack-hit dispatcher (§6): CombatUnit calls this with its faction's `attackVfxStyle` and never needs to know which faction it is. */
-  spawnAttackHit(style: AttackVfxStyle, from: THREE.Vector3, to: THREE.Vector3): void {
-    this.attackHitHandlers[style](from, to);
+  /**
+   * Faction-agnostic attack-hit dispatcher (§6): CombatUnit calls this with
+   * its faction's `attackVfxStyle` and never needs to know which faction it
+   * is. `powerScale` (1 = an average hit) sizes up every style's impact
+   * flash/particles so a heavy hitter's attack visibly lands harder than a
+   * basic unit's.
+   */
+  spawnAttackHit(style: AttackVfxStyle, from: THREE.Vector3, to: THREE.Vector3, powerScale = 1): void {
+    this.attackHitHandlers[style](from, to, powerScale);
   }
 
   /** Cyber-Nexus attack VFX per §6: thin neon-blue laser line + a small impact flash. */
-  spawnLaserHit(from: THREE.Vector3, to: THREE.Vector3, color = 0x4fc3ff): void {
+  spawnLaserHit(from: THREE.Vector3, to: THREE.Vector3, powerScale = 1, color = 0x4fc3ff): void {
     const geometry = new THREE.BufferGeometry().setFromPoints([from, to]);
     const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 });
     const line = new THREE.Line(geometry, material);
@@ -55,7 +61,7 @@ export class EffectManager {
     });
 
     const flashMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 });
-    const flashGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+    const flashGeometry = new THREE.SphereGeometry(0.3 * powerScale, 8, 8);
     const flash = new THREE.Mesh(flashGeometry, flashMaterial);
     flash.position.copy(to);
     this.scene.add(flash);
@@ -75,11 +81,11 @@ export class EffectManager {
   }
 
   /** Pyroliths attack VFX per §6: a thick lava arc that leaves a brief burning mark on the ground at the impact point. */
-  spawnLavaArcHit(from: THREE.Vector3, to: THREE.Vector3): void {
+  spawnLavaArcHit(from: THREE.Vector3, to: THREE.Vector3, powerScale = 1): void {
     const arcMid = from.clone().lerp(to, 0.5);
     arcMid.y += 0.6;
     const curve = new THREE.QuadraticBezierCurve3(from, arcMid, to);
-    const geometry = new THREE.TubeGeometry(curve, 12, 0.12, 6, false);
+    const geometry = new THREE.TubeGeometry(curve, 12, 0.12 * powerScale, 6, false);
     const material = new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: 0.95 });
     const arc = new THREE.Mesh(geometry, material);
     this.scene.add(arc);
@@ -96,7 +102,7 @@ export class EffectManager {
       },
     });
 
-    const burnGeometry = new THREE.CircleGeometry(0.55, 10);
+    const burnGeometry = new THREE.CircleGeometry(0.55 * powerScale, 10);
     const burnMaterial = new THREE.MeshBasicMaterial({ color: 0x552005, transparent: true, opacity: 0.8 });
     const burn = new THREE.Mesh(burnGeometry, burnMaterial);
     burn.rotation.x = -Math.PI / 2;
@@ -118,7 +124,7 @@ export class EffectManager {
   }
 
   /** Solari Archons attack VFX per §6: a continuous light beam whose impact disperses into small light particles. */
-  spawnLightBeamHit(from: THREE.Vector3, to: THREE.Vector3): void {
+  spawnLightBeamHit(from: THREE.Vector3, to: THREE.Vector3, powerScale = 1): void {
     const geometry = new THREE.BufferGeometry().setFromPoints([from, to]);
     const material = new THREE.LineBasicMaterial({ color: 0xf4c542, transparent: true, opacity: 1 });
     const beam = new THREE.Line(geometry, material);
@@ -141,7 +147,7 @@ export class EffectManager {
       const angle = (i / particleCount) * Math.PI * 2;
       const direction = new THREE.Vector3(Math.cos(angle), 0.3 + Math.random() * 0.5, Math.sin(angle));
       const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 1 });
-      const particle = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), particleMaterial);
+      const particle = new THREE.Mesh(new THREE.SphereGeometry(0.09 * powerScale, 6, 6), particleMaterial);
       particle.position.copy(to);
       this.scene.add(particle);
       const maxLife = 0.25 + Math.random() * 0.15;
@@ -149,7 +155,7 @@ export class EffectManager {
         life: 0,
         maxLife,
         tick: (t) => {
-          particle.position.copy(to).addScaledVector(direction, t * 1.8);
+          particle.position.copy(to).addScaledVector(direction, t * 1.8 * powerScale);
           particleMaterial.opacity = 1 - t;
         },
         dispose: () => {
@@ -167,7 +173,7 @@ export class EffectManager {
    * instantaneous streak-plus-impact (same resolve-on-hit shape as the other
    * three styles) rather than a time-of-flight projectile.
    */
-  spawnProjectileHit(from: THREE.Vector3, to: THREE.Vector3): void {
+  spawnProjectileHit(from: THREE.Vector3, to: THREE.Vector3, powerScale = 1): void {
     const geometry = new THREE.BufferGeometry().setFromPoints([from, to]);
     const material = new THREE.LineBasicMaterial({ color: 0x6f7a80, transparent: true, opacity: 0.7 });
     const streak = new THREE.Line(geometry, material);
@@ -190,7 +196,7 @@ export class EffectManager {
       const angle = (i / sparkCount) * Math.PI * 2;
       const direction = new THREE.Vector3(Math.cos(angle), 0.4 + Math.random() * 0.4, Math.sin(angle));
       const sparkMaterial = new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 1 });
-      const spark = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), sparkMaterial);
+      const spark = new THREE.Mesh(new THREE.BoxGeometry(0.08 * powerScale, 0.08 * powerScale, 0.08 * powerScale), sparkMaterial);
       spark.position.copy(to);
       this.scene.add(spark);
       const maxLife = 0.2 + Math.random() * 0.15;
@@ -198,7 +204,7 @@ export class EffectManager {
         life: 0,
         maxLife,
         tick: (t) => {
-          spark.position.copy(to).addScaledVector(direction, t * 2.4);
+          spark.position.copy(to).addScaledVector(direction, t * 2.4 * powerScale);
           sparkMaterial.opacity = 1 - t;
         },
         dispose: () => {
@@ -210,7 +216,7 @@ export class EffectManager {
     }
 
     const cloudMaterial = new THREE.MeshBasicMaterial({ color: 0x9fe8f0, transparent: true, opacity: 0.55 });
-    const cloud = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), cloudMaterial);
+    const cloud = new THREE.Mesh(new THREE.SphereGeometry(0.3 * powerScale, 8, 8), cloudMaterial);
     cloud.position.copy(to);
     this.scene.add(cloud);
     this.active.push({
@@ -229,11 +235,11 @@ export class EffectManager {
   }
 
   /** Verdant Wilds attack VFX: a lobbed spore pod that bursts into a cloud of drifting toxic spore motes on impact. */
-  spawnSporeBurstHit(from: THREE.Vector3, to: THREE.Vector3): void {
+  spawnSporeBurstHit(from: THREE.Vector3, to: THREE.Vector3, powerScale = 1): void {
     const arcMid = from.clone().lerp(to, 0.5);
     arcMid.y += 0.8;
     const curve = new THREE.QuadraticBezierCurve3(from, arcMid, to);
-    const geometry = new THREE.TubeGeometry(curve, 10, 0.06, 6, false);
+    const geometry = new THREE.TubeGeometry(curve, 10, 0.06 * powerScale, 6, false);
     const material = new THREE.MeshBasicMaterial({ color: 0x7fd94f, transparent: true, opacity: 0.85 });
     const pod = new THREE.Mesh(geometry, material);
     this.scene.add(pod);
@@ -255,7 +261,7 @@ export class EffectManager {
       const angle = (i / moteCount) * Math.PI * 2;
       const direction = new THREE.Vector3(Math.cos(angle), 0.3 + Math.random() * 0.6, Math.sin(angle));
       const moteMaterial = new THREE.MeshBasicMaterial({ color: 0x8fd45f, transparent: true, opacity: 0.9 });
-      const mote = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), moteMaterial);
+      const mote = new THREE.Mesh(new THREE.SphereGeometry(0.07 * powerScale, 6, 6), moteMaterial);
       mote.position.copy(to);
       this.scene.add(mote);
       const maxLife = 0.3 + Math.random() * 0.25;
@@ -263,7 +269,7 @@ export class EffectManager {
         life: 0,
         maxLife,
         tick: (t) => {
-          mote.position.copy(to).addScaledVector(direction, t * 1.5);
+          mote.position.copy(to).addScaledVector(direction, t * 1.5 * powerScale);
           moteMaterial.opacity = 0.9 * (1 - t);
         },
         dispose: () => {
@@ -276,7 +282,7 @@ export class EffectManager {
   }
 
   /** Umbral Voidkin attack VFX: a jagged violet shadow bolt whose impact tears open into wisping void tendrils. */
-  spawnShadowBoltHit(from: THREE.Vector3, to: THREE.Vector3): void {
+  spawnShadowBoltHit(from: THREE.Vector3, to: THREE.Vector3, powerScale = 1): void {
     const geometry = new THREE.BufferGeometry().setFromPoints([from, to]);
     const material = new THREE.LineBasicMaterial({ color: 0x9f6fd0, transparent: true, opacity: 0.9 });
     const bolt = new THREE.Line(geometry, material);
@@ -299,7 +305,7 @@ export class EffectManager {
       const angle = (i / tendrilCount) * Math.PI * 2;
       const direction = new THREE.Vector3(Math.cos(angle), 0.2 + Math.random() * 0.5, Math.sin(angle));
       const tendrilMaterial = new THREE.MeshBasicMaterial({ color: 0x6a2fa0, transparent: true, opacity: 0.85 });
-      const tendril = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.35, 5), tendrilMaterial);
+      const tendril = new THREE.Mesh(new THREE.ConeGeometry(0.05 * powerScale, 0.35 * powerScale, 5), tendrilMaterial);
       tendril.position.copy(to);
       this.scene.add(tendril);
       const maxLife = 0.22 + Math.random() * 0.15;
@@ -307,7 +313,7 @@ export class EffectManager {
         life: 0,
         maxLife,
         tick: (t) => {
-          tendril.position.copy(to).addScaledVector(direction, t * 2.0);
+          tendril.position.copy(to).addScaledVector(direction, t * 2.0 * powerScale);
           tendrilMaterial.opacity = 0.85 * (1 - t);
         },
         dispose: () => {
@@ -319,7 +325,7 @@ export class EffectManager {
     }
 
     const voidCloudMaterial = new THREE.MeshBasicMaterial({ color: 0x2d0f4a, transparent: true, opacity: 0.6 });
-    const voidCloud = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), voidCloudMaterial);
+    const voidCloud = new THREE.Mesh(new THREE.SphereGeometry(0.28 * powerScale, 8, 8), voidCloudMaterial);
     voidCloud.position.copy(to);
     this.scene.add(voidCloud);
     this.active.push({

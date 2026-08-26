@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { Unit, approachAngle, TURN_RATE_RAD_PER_SEC } from './Unit';
+import { Unit, approachAngle, TURN_RATE_RAD_PER_SEC, computePowerScale } from './Unit';
 import type { UnitConfig } from '../../config/units';
 import type { AttackVfxStyle } from '../../config/factions';
 import type { Targetable } from '../Targetable';
 import type { EffectManager } from '../CombatVFX';
 import { HealthBar } from '../HealthBar';
 import { RankBadge } from '../RankBadge';
+import { PowerBar } from '../PowerBar';
 import { buildUnitVisual } from './visuals';
 import { acquireTarget } from '../Targeting';
 
@@ -26,6 +27,16 @@ const RANK_XP_THRESHOLDS = [0, 30, 90];
 const RANK_STAT_MULTIPLIER = [1, 1.15, 1.35];
 const XP_PER_DAMAGE_DEALT = 0.5;
 const KILL_BONUS_XP = 15;
+
+/** Full-bar reference for the power bar (a fusion ultimate's burst damage) and the threshold past which it renders doubled. */
+const POWER_BAR_REFERENCE_DAMAGE = 50;
+const POWER_BAR_DOUBLE_THRESHOLD = 20;
+
+/** Magic/support-role units always get the doubled power bar per design, regardless of raw damage. */
+function isMagicOrSupportRole(role: string): boolean {
+  const r = role.toLowerCase();
+  return r.includes('magic') || r.includes('shaman') || r.includes('support');
+}
 
 type AttackState = 'idle' | 'windup';
 
@@ -51,12 +62,14 @@ export class CombatUnit extends Unit implements Targetable {
   private readonly attackVfxStyle: AttackVfxStyle;
   private readonly healthBar: HealthBar;
   private readonly rankBadge: RankBadge;
+  private readonly powerBar: PowerBar;
   private xp = 0;
   private rank = 0;
   private state: AttackState = 'idle';
   private cooldownRemaining = 0;
   private windupRemaining = 0;
   private lungeRemaining = 0;
+  private lungePowerScale = 1;
   private lastCandidates: Targetable[] = [];
   private fusing = false;
 
@@ -85,10 +98,19 @@ export class CombatUnit extends Unit implements Targetable {
 
     this.rankBadge = new RankBadge(combat.healthBarYOffset + 0.22, MAX_RANK);
     this.mesh.add(this.rankBadge.group);
+
+    const doubled = isMagicOrSupportRole(config.role) || this.damage * this.multiTargetCount >= POWER_BAR_DOUBLE_THRESHOLD;
+    this.powerBar = new PowerBar(combat.healthBarYOffset - 0.16, doubled);
+    this.mesh.add(this.powerBar.group);
+    this.updatePowerBar();
   }
 
   rankName(): string {
     return RANK_NAMES[this.rank];
+  }
+
+  private updatePowerBar(): void {
+    this.powerBar.setPower((this.damage * this.multiTargetCount) / POWER_BAR_REFERENCE_DAMAGE);
   }
 
   private gainXp(amount: number): void {
@@ -109,6 +131,7 @@ export class CombatUnit extends Unit implements Targetable {
     this.damage = this.baseDamage * multiplier;
     this.healthBar.update(this.hp / this.maxHp);
     this.rankBadge.setRank(this.rank);
+    this.updatePowerBar();
   }
 
   isAlive(): boolean {
@@ -120,7 +143,7 @@ export class CombatUnit extends Unit implements Targetable {
     this.hp = Math.max(0, this.hp - amount);
     this.healthBar.update(this.hp / this.maxHp);
     if (this.hp <= 0) this.beginDeath();
-    else this.triggerHitFlash();
+    else this.triggerHitFlash(amount);
   }
 
   setTarget(target: Targetable | null): void {
@@ -180,6 +203,7 @@ export class CombatUnit extends Unit implements Targetable {
     this.healthBar.setForcedVisible(this.selected);
     this.healthBar.faceCamera(camera);
     this.rankBadge.faceCamera(camera);
+    this.powerBar.faceCamera(camera);
   }
 
   /** Brief forward punch on the moment of impact, easing back to neutral — makes a resolved attack read as a hit rather than a silent timer tick. */
@@ -191,7 +215,7 @@ export class CombatUnit extends Unit implements Targetable {
     this.lungeRemaining = Math.max(this.lungeRemaining - dt, 0);
     const t = this.lungeRemaining / LUNGE_DURATION_SEC;
     const facing = new THREE.Vector3(Math.sin(this.mesh.rotation.y), 0, Math.cos(this.mesh.rotation.y));
-    this.mesh.position.copy(this.position).addScaledVector(facing, t * LUNGE_DISTANCE);
+    this.mesh.position.copy(this.position).addScaledVector(facing, t * LUNGE_DISTANCE * this.lungePowerScale);
   }
 
   private faceTarget(targetPos: THREE.Vector3, dt: number): void {
@@ -224,6 +248,7 @@ export class CombatUnit extends Unit implements Targetable {
   private resolveAttack(): void {
     if (!this.target) return;
     this.lungeRemaining = LUNGE_DURATION_SEC;
+    this.lungePowerScale = computePowerScale(this.damage);
     const targets = this.multiTargetCount > 1 ? this.pickMultiTargets() : [this.target];
 
     const origin = this.position.clone();
@@ -233,7 +258,7 @@ export class CombatUnit extends Unit implements Targetable {
       target.takeDamage(this.damage);
       const impact = target.position.clone();
       impact.y = 1.1;
-      this.effects.spawnAttackHit(this.attackVfxStyle, origin, impact);
+      this.effects.spawnAttackHit(this.attackVfxStyle, origin, impact, this.lungePowerScale);
       this.gainXp(this.damage * XP_PER_DAMAGE_DEALT + (wasAlive && !target.isAlive() ? KILL_BONUS_XP : 0));
     }
   }
