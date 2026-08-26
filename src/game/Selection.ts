@@ -213,17 +213,29 @@ export class SelectionManager {
     if (!/^Digit[1-9]$/.test(e.code)) return;
     const groupNumber = Number(e.code.replace('Digit', ''));
 
-    if (e.ctrlKey || e.metaKey) {
-      this.controlGroups.set(groupNumber, [...this.selected]);
-      return;
-    }
+    if (e.ctrlKey || e.metaKey) this.setControlGroup(groupNumber);
+    else this.recallControlGroup(groupNumber);
+  }
 
+  /** Assigns the current selection to control group `groupNumber` (1-9). Public so a touch UI (long-press a group slot) can trigger it without a Ctrl key, which touch has no equivalent of. */
+  setControlGroup(groupNumber: number): void {
+    this.controlGroups.set(groupNumber, [...this.selected]);
+  }
+
+  /** Selects control group `groupNumber`, dropping any units that died since it was set. Public so a touch UI (tap a group slot) can trigger it. */
+  recallControlGroup(groupNumber: number): void {
     const liveUnits = this.getUnits();
     const group = this.controlGroups.get(groupNumber)?.filter((u) => liveUnits.includes(u));
     if (!group || group.length === 0) return;
     this.clear();
     for (const unit of group) this.select(unit);
     this.onChange();
+  }
+
+  /** Whether control group `groupNumber` currently has any (still-live) units assigned — for a UI indicator. */
+  hasControlGroup(groupNumber: number): boolean {
+    const liveUnits = this.getUnits();
+    return (this.controlGroups.get(groupNumber)?.filter((u) => liveUnits.includes(u)).length ?? 0) > 0;
   }
 
   select(unit: Unit): void {

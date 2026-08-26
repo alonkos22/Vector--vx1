@@ -25,6 +25,7 @@ import { CoreEnergyWave } from './game/hazards/CoreEnergyWave';
 import { buildRallyFlag } from './game/RallyFlag';
 import { HUD, type HUDPanelState } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
+import { ControlGroupBar } from './ui/ControlGroupBar';
 import { soundManager } from './game/SoundManager';
 
 window.addEventListener('pointerdown', () => soundManager.unlock(), { once: true });
@@ -238,6 +239,7 @@ function beginPlacement(role: BuildingRole): void {
   ghostMesh.position.y = config.footprint * 0.8;
   scene.add(ghostMesh);
   hud.setStatus(`Placing ${config.name}…`);
+  hud.closeTray();
 }
 
 function cancelPlacement(): void {
@@ -265,6 +267,7 @@ function beginRallySet(role: BuildingRole): void {
   rallyGhost = buildRallyFlag();
   scene.add(rallyGhost);
   hud.setStatus('Click the ground to set the rally point (Esc to cancel)');
+  hud.closeTray();
 }
 
 function cancelRally(): void {
@@ -504,6 +507,18 @@ const minimap = new Minimap(
   (worldX, worldZ) => {
     const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
     issueMoveOrderAtPoint(new THREE.Vector3(worldX, 0, worldZ), selectedCombat);
+  },
+);
+
+const controlGroupBar = new ControlGroupBar(
+  app,
+  (groupNumber) => {
+    soundManager.playUIClick();
+    selection.recallControlGroup(groupNumber);
+  },
+  (groupNumber) => {
+    soundManager.playUIClick();
+    selection.setControlGroup(groupNumber);
   },
 );
 
@@ -761,6 +776,7 @@ function animate(): void {
 
     selection.prune();
     updateSelectionHUD();
+    controlGroupBar.update([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => selection.hasControlGroup(n)));
 
     hud.update({
       coreEnergy: playerBase.economy.coreEnergy,

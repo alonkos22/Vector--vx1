@@ -257,6 +257,12 @@ export class HUD {
     return { tray, title, buildRow, queueLabel, unitsRow, unitButtons: new Map(), rallySetBtn, rallyClearBtn, mergeBtn };
   }
 
+  /** Closes whichever tray is open. Called once placement/rally mode starts, since at that point the player needs a clear view of the ground to click on — the tray would otherwise sit directly over the exact area (often the player's own base) they need to click. */
+  closeTray(): void {
+    this.openRole = null;
+    this.applyOpenState();
+  }
+
   private applyOpenState(): void {
     for (const [role, tray] of this.trays) {
       tray.tray.style.display = this.openRole === role ? 'flex' : 'none';
