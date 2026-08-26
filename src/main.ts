@@ -19,7 +19,8 @@ import { Unit } from './game/units/Unit';
 import type { Targetable } from './game/Targetable';
 import { pathGrid } from './game/Pathfinding';
 import { elevation } from './game/Elevation';
-import { buildTerrainFeatures } from './game/TerrainFeatures';
+import { buildTerrainFeatures, getOccupiedRegions } from './game/TerrainFeatures';
+import { loadDecorativeModels } from './game/DecorativeModels';
 import { EffectManager } from './game/CombatVFX';
 import { SelectionManager } from './game/Selection';
 import { ConvergenceManager } from './game/Convergence';
@@ -190,6 +191,12 @@ pathGrid.init(MAP_HALF_EXTENT, 2);
 pathGrid.markCircleBlocked(new THREE.Vector3(0, 0, 0), 9);
 elevation.init(MAP_HALF_EXTENT, 2);
 scene.add(buildTerrainFeatures());
+loadDecorativeModels(scene, MAP_HALF_EXTENT, [
+  ...getOccupiedRegions(),
+  { x: 0, z: 0, radius: 12 },
+  { x: PLAYER_BASE_POSITION.x, z: PLAYER_BASE_POSITION.z, radius: 42 },
+  { x: AI_BASE_POSITION.x, z: AI_BASE_POSITION.z, radius: 42 },
+]);
 
 // ---------------------------------------------------------------------------
 // Player + AI bases — identical economy/production/army systems (PlayerBase),

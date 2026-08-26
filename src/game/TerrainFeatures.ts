@@ -108,6 +108,36 @@ function buildCrater(center: [number, number], radius: number): THREE.Group {
  * decorative craters off to the sides. Coordinates keep clear of both
  * bases' home resource-node clusters and the central Core Zone.
  */
+export interface OccupiedRegion {
+  x: number;
+  z: number;
+  radius: number;
+}
+
+const RIDGE_A_POINTS: Array<[number, number]> = [
+  [-7, 42.4],
+  [5.3, 30.1],
+  // gap near (17.7, 17.7) — the pass
+  [30.1, 5.3],
+  [42.4, -7],
+];
+const RIDGE_B_POINTS: Array<[number, number]> = [
+  [-42.4, 7],
+  [-30.1, -5.3],
+  // gap near (-17.7, -17.7) — the pass
+  [-5.3, -30.1],
+  [7, -42.4],
+];
+const RIDGE_BLOCK_RADIUS = 6;
+const PLATEAUS: Array<{ center: [number, number]; radius: number }> = [
+  { center: [10, 34], radius: 9 },
+  { center: [-34, -10], radius: 9 },
+];
+const CRATERS: Array<{ center: [number, number]; radius: number }> = [
+  { center: [-70, 25], radius: 7 },
+  { center: [70, -25], radius: 6 },
+];
+
 export function buildTerrainFeatures(): THREE.Group {
   const group = new THREE.Group();
 
@@ -115,37 +145,22 @@ export function buildTerrainFeatures(): THREE.Group {
   // player-facing side) both run perpendicular to the base-to-base diagonal,
   // each with a gap near the diagonal itself so the two gaps line up into
   // one defended corridor rather than two separate holes.
-  const ridgeA = buildRidge(
-    [
-      [-7, 42.4],
-      [5.3, 30.1],
-      // gap near (17.7, 17.7) — the pass
-      [30.1, 5.3],
-      [42.4, -7],
-    ],
-    6,
-    101,
-  );
-  const ridgeB = buildRidge(
-    [
-      [-42.4, 7],
-      [-30.1, -5.3],
-      // gap near (-17.7, -17.7) — the pass
-      [-5.3, -30.1],
-      [7, -42.4],
-    ],
-    6,
-    202,
-  );
-  group.add(ridgeA, ridgeB);
+  group.add(buildRidge(RIDGE_A_POINTS, RIDGE_BLOCK_RADIUS, 101), buildRidge(RIDGE_B_POINTS, RIDGE_BLOCK_RADIUS, 202));
 
   // High ground overlooking each gap.
-  group.add(buildPlateau([10, 34], 9, 2.6));
-  group.add(buildPlateau([-34, -10], 9, 2.6));
+  for (const p of PLATEAUS) group.add(buildPlateau(p.center, p.radius, 2.6));
 
   // Decorative craters, well clear of ridges/plateaus/resource clusters.
-  group.add(buildCrater([-70, 25], 7));
-  group.add(buildCrater([70, -25], 6));
+  for (const c of CRATERS) group.add(buildCrater(c.center, c.radius));
 
   return group;
+}
+
+/** Every hand-placed terrain feature's footprint, with a margin — for other decoration (e.g. scattered models) to avoid overlapping them. */
+export function getOccupiedRegions(): OccupiedRegion[] {
+  const regions: OccupiedRegion[] = [];
+  for (const [x, z] of [...RIDGE_A_POINTS, ...RIDGE_B_POINTS]) regions.push({ x, z, radius: RIDGE_BLOCK_RADIUS + 6 });
+  for (const p of PLATEAUS) regions.push({ x: p.center[0], z: p.center[1], radius: p.radius + 6 });
+  for (const c of CRATERS) regions.push({ x: c.center[0], z: c.center[1], radius: c.radius + 6 });
+  return regions;
 }
