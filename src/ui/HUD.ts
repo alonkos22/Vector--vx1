@@ -211,11 +211,12 @@ export class HUD {
     const tray = document.createElement('div');
     tray.style.cssText = `
       background: rgba(10,16,24,0.9); border: 1px solid #2ea3ff55; border-radius: 8px;
-      padding: 10px; display: flex; flex-direction: column; gap: 6px; min-width: 240px; max-width: 320px;
+      padding: 8px; display: flex; flex-direction: column; gap: 4px; width: 220px;
+      max-height: 46vh; overflow-y: auto;
     `;
 
     const title = document.createElement('div');
-    title.style.cssText = 'font-size: 12px; font-weight: 700; color: #9fd8ff;';
+    title.style.cssText = 'font-size: 11px; font-weight: 700; color: #9fd8ff;';
     tray.appendChild(title);
 
     const buildRow = document.createElement('button');
@@ -224,11 +225,12 @@ export class HUD {
     tray.appendChild(buildRow);
 
     const queueLabel = document.createElement('div');
-    queueLabel.style.cssText = 'font-size: 11px; color: #9fd8ffcc;';
+    queueLabel.style.cssText = 'font-size: 10px; color: #9fd8ffcc;';
     tray.appendChild(queueLabel);
 
+    // Two-column grid, not a stacked column, so a building's usual 2 producible units take one short row instead of two — the single biggest driver of the tray's old height.
     const unitsRow = document.createElement('div');
-    unitsRow.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+    unitsRow.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 4px;';
     tray.appendChild(unitsRow);
 
     const rallyRow = document.createElement('div');
@@ -354,7 +356,7 @@ export class HUD {
       const btn = tray.unitButtons.get(unit.unitId);
       if (!btn) continue;
       btn.style.display = built ? 'block' : 'none';
-      btn.textContent = `${unit.name}  ${unit.costLabel}`;
+      btn.textContent = `${unit.name}\n${unit.costLabel}`;
       btn.disabled = panelState.queueFull || !panelState.unitAffordability[unit.unitId];
     }
 
@@ -405,10 +407,10 @@ export class HUD {
 
 function styleCompactButton(button: HTMLButtonElement): void {
   button.style.cssText = `
-    font: inherit; font-size: 12px; color: #dff3ff; text-align: left;
+    font: inherit; font-size: 11px; color: #dff3ff; text-align: left;
     background: rgba(46,163,255,0.15); border: 1px solid #2ea3ff88;
-    border-radius: 4px; padding: 8px 10px; cursor: pointer;
-    min-height: 34px; touch-action: manipulation;
+    border-radius: 4px; padding: 6px 8px; cursor: pointer; line-height: 1.3;
+    min-height: 26px; touch-action: manipulation; white-space: pre-line;
   `;
   button.addEventListener('click', () => soundManager.playUIClick());
   button.addEventListener('mouseenter', () => {
