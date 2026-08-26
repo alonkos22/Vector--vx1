@@ -147,6 +147,13 @@ export class PlayerBase {
     return harvester;
   }
 
+  /** Player order (full manual control, per user request): sends a selected harvester to mine a specific resource node instead of wherever the auto-assignment put it, resolving the correct dropoff building for that resource type. */
+  manualAssignHarvester(harvester: FluxHarvester, node: ResourceNode): void {
+    const dropoff = node.type === 'coreEnergy' ? this.mainBuilding : this.getBuildingByRole('resourceDropoff');
+    if (!dropoff) return;
+    harvester.orderMineAt(node, dropoff);
+  }
+
   spawnCombatUnit(unitTypeId: string, position: THREE.Vector3): CombatUnit {
     const config = this.unitsConfig[unitTypeId];
     const unit = new CombatUnit(config, this.ownerId, position, this.effects, this.factionConfig.attackVfxStyle);

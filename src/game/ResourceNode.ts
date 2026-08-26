@@ -32,6 +32,7 @@ export class ResourceNode {
     this.mesh.position.copy(this.position);
     this.mesh.position.y = 1;
     this.mesh.castShadow = true;
+    this.mesh.userData.nodeRef = this;
   }
 
   isDepleted(): boolean {

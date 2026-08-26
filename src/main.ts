@@ -6,12 +6,14 @@ import { CoreZone } from './game/CoreZone';
 import { BIOMES } from './config/biomes';
 import { FACTIONS } from './config/factions';
 import { BUILDINGS_BY_FACTION, BUILDING_ROLES, type BuildingRole, type BuildingConfig } from './config/buildings';
-import { UNITS_BY_FACTION } from './config/units';
+import { UNITS_BY_FACTION, type UnitConfig } from './config/units';
 import { CONVERGENCE_BY_FACTION } from './config/convergence';
 import { BUILDING_FUSION_BY_FACTION } from './config/buildingFusion';
 import { PlayerBase } from './game/PlayerBase';
 import { CombatUnit } from './game/units/CombatUnit';
+import { FluxHarvester } from './game/units/FluxHarvester';
 import { TrainingDummy } from './game/units/TrainingDummy';
+import type { ResourceNode } from './game/ResourceNode';
 import { Unit } from './game/units/Unit';
 import type { Targetable } from './game/Targetable';
 import { pathGrid } from './game/Pathfinding';
@@ -38,6 +40,22 @@ function formatCost(costCoreEnergy: number, costFactionResource: number, buildTi
   if (costCoreEnergy > 0) parts.push(`${costCoreEnergy}⚡`);
   if (costFactionResource > 0) parts.push(`${costFactionResource}◆`);
   return `${parts.join(' ')} · ${buildTimeSec}s`;
+}
+
+/** Absolute combat power (same hp + effectiveDps*5 shape used to balance-tune every faction's roster — see config/units.ts) — used to rank a building's producible units strongest-first (per user request). 0 for non-combat units (harvesters), which sort last. */
+function unitPowerScore(config: UnitConfig): number {
+  if (!config.combat) return 0;
+  const dps = (config.combat.damage * (config.combat.multiTargetCount ?? 1)) / config.combat.attackCooldown;
+  return config.combat.hp + dps * 5;
+}
+
+/** Compact power readout + flavor/abilities text shown on a unit's build button (per user request: full data, visible in-game, not hidden). */
+function unitStatsAndAbilities(config: UnitConfig): { statsLabel: string; abilityLabel: string } {
+  const combat = config.combat;
+  const statsLabel = combat
+    ? `❤${combat.hp} ⚔${combat.damage}${combat.multiTargetCount ? ` ×${combat.multiTargetCount}` : ''}`
+    : '';
+  return { statsLabel, abilityLabel: config.role };
 }
 
 const MAP_HALF_EXTENT = 100;
@@ -440,29 +458,55 @@ function pickTargetAt(clientX: number, clientY: number): Targetable | null {
   return null;
 }
 
-function issueOrderAt(clientX: number, clientY: number): void {
-  const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
-  if (selectedCombat.length === 0 || placementTarget) return;
-
-  const target = pickTargetAt(clientX, clientY);
-  if (target) {
-    for (const unit of selectedCombat) unit.setTarget(target);
-    return;
+/** Raycast against the player's own resource nodes only — a manual harvester reassignment only makes sense onto a node near the player's own territory. */
+function pickResourceNodeAt(clientX: number, clientY: number): ResourceNode | null {
+  const ndc = new THREE.Vector2((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, rtsCamera.camera);
+  const hits = raycaster.intersectObjects(
+    playerBase.resourceNodes.filter((n) => !n.isDepleted()).map((n) => n.mesh),
+    true,
+  );
+  for (const hit of hits) {
+    let obj: THREE.Object3D | null = hit.object;
+    while (obj) {
+      const ref = obj.userData.nodeRef as ResourceNode | undefined;
+      if (ref) return ref;
+      obj = obj.parent;
+    }
   }
+  return null;
+}
+
+function issueOrderAt(clientX: number, clientY: number): void {
+  if (placementTarget) return;
+  const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
+  const selectedHarvesters = [...selection.selected].filter((u): u is FluxHarvester => u instanceof FluxHarvester);
+  if (selectedCombat.length === 0 && selectedHarvesters.length === 0) return;
+
+  const target = selectedCombat.length > 0 ? pickTargetAt(clientX, clientY) : null;
+  if (target) for (const unit of selectedCombat) unit.setTarget(target);
+
+  const node = selectedHarvesters.length > 0 ? pickResourceNodeAt(clientX, clientY) : null;
+  if (node) for (const harvester of selectedHarvesters) playerBase.manualAssignHarvester(harvester, node);
+
+  if (target && node) return;
 
   const point = screenToGround(clientX, clientY);
   if (!point) return;
-  issueMoveOrderAtPoint(point, selectedCombat);
+  if (selectedCombat.length > 0 && !target) issueMoveOrderAtPoint(point, selectedCombat);
+  if (selectedHarvesters.length > 0 && !node) for (const harvester of selectedHarvesters) harvester.orderMoveTo(point);
 }
 
-/** Formation move order to a known ground point — shared by the main viewport's right-click and the minimap's right-click, which has no screen-space raycast to pick an attack target from and so is always a move order. */
-function issueMoveOrderAtPoint(point: THREE.Vector3, selectedCombat: CombatUnit[]): void {
-  if (selectedCombat.length === 0) return;
-  const offsets = computeFormationOffsets(selectedCombat.length);
-  selectedCombat.forEach((unit, i) => {
-    unit.setTarget(null);
-    unit.moveTo(point.clone().add(offsets[i]));
-  });
+/** Formation move order to a known ground point — shared by the main viewport's right-click and the minimap's right-click, which has no screen-space raycast to pick an attack target or resource node from and so is always a plain move order. */
+function issueMoveOrderAtPoint(point: THREE.Vector3, selectedCombat: CombatUnit[], selectedHarvesters: FluxHarvester[] = []): void {
+  if (selectedCombat.length > 0) {
+    const offsets = computeFormationOffsets(selectedCombat.length);
+    selectedCombat.forEach((unit, i) => {
+      unit.setTarget(null);
+      unit.moveTo(point.clone().add(offsets[i]));
+    });
+  }
+  for (const harvester of selectedHarvesters) harvester.orderMoveTo(point);
 }
 
 /**
@@ -490,8 +534,8 @@ function computeFormationOffsets(count: number): THREE.Vector3[] {
 /** Touch has no right-click, so a tap does double duty: select on a friendly unit, otherwise move/attack (issueOrderAt) — but only when something is already selected, so an empty-handed tap still just (de)selects normally. */
 function handleTouchTap(clientX: number, clientY: number): boolean {
   if (placementTarget) return false;
-  const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
-  if (selectedCombat.length === 0 || selection.hasUnitAt(clientX, clientY)) return false;
+  const hasOrderableSelection = [...selection.selected].some((u) => u instanceof CombatUnit || u instanceof FluxHarvester);
+  if (!hasOrderableSelection || selection.hasUnitAt(clientX, clientY)) return false;
 
   issueOrderAt(clientX, clientY);
   return true;
@@ -524,7 +568,8 @@ const minimap = new Minimap(
   },
   (worldX, worldZ) => {
     const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
-    issueMoveOrderAtPoint(new THREE.Vector3(worldX, 0, worldZ), selectedCombat);
+    const selectedHarvesters = [...selection.selected].filter((u): u is FluxHarvester => u instanceof FluxHarvester);
+    issueMoveOrderAtPoint(new THREE.Vector3(worldX, 0, worldZ), selectedCombat, selectedHarvesters);
   },
 );
 
@@ -545,10 +590,18 @@ function buildPanelState(role: BuildingRole): HUDPanelState {
   const building = playerBase.getBuildingByRole(role);
   const built = building?.isComplete ?? false;
 
-  const units = config.produces.map((unitId) => {
-    const unitConfig = PLAYER_UNITS[unitId];
-    return { unitId, name: unitConfig.name, costLabel: formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec) };
-  });
+  const units = config.produces
+    .map((unitId) => {
+      const unitConfig = PLAYER_UNITS[unitId];
+      return {
+        unitId,
+        name: unitConfig.name,
+        costLabel: formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec),
+        ...unitStatsAndAbilities(unitConfig),
+        power: unitPowerScore(unitConfig),
+      };
+    })
+    .sort((a, b) => b.power - a.power);
   const unitAffordability: Record<string, boolean> = {};
   for (const unitId of config.produces) {
     const unitConfig = PLAYER_UNITS[unitId];
@@ -567,6 +620,9 @@ function buildPanelState(role: BuildingRole): HUDPanelState {
     constructionProgress: building && !building.isComplete ? building.constructionProgress() : null,
     buildCostLabel: formatCost(config.costCoreEnergy, config.costFactionResource, config.buildTimeSec),
     canAffordBuilding: playerBase.economy.canAfford(config.costCoreEnergy, config.costFactionResource),
+    hp: building?.hp ?? config.maxHp,
+    maxHp: config.maxHp,
+    visionRadius: config.visionRadius,
     units,
     unitAffordability,
     queueLength: building?.queueLength() ?? 0,

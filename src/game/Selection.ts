@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Unit } from './units/Unit';
+import { FluxHarvester } from './units/FluxHarvester';
 
 const DRAG_THRESHOLD_PX = 4;
 const DOUBLE_CLICK_MS = 350;
@@ -241,15 +242,22 @@ export class SelectionManager {
   select(unit: Unit): void {
     unit.setSelected(true);
     this.selected.add(unit);
+    // Full manual control (per user request): selecting a harvester pauses its autonomous gather loop for a
+    // few seconds so the player has a window to give it an order before it walks off on its own again.
+    if (unit instanceof FluxHarvester) unit.pauseForOrder();
   }
 
   deselect(unit: Unit): void {
     unit.setSelected(false);
     this.selected.delete(unit);
+    if (unit instanceof FluxHarvester) unit.cancelPause();
   }
 
   clear(): void {
-    for (const unit of this.selected) unit.setSelected(false);
+    for (const unit of this.selected) {
+      unit.setSelected(false);
+      if (unit instanceof FluxHarvester) unit.cancelPause();
+    }
     this.selected.clear();
   }
 

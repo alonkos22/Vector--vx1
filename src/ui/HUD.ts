@@ -5,6 +5,10 @@ export interface HUDUnitDef {
   unitId: string;
   name: string;
   costLabel: string;
+  /** Compact power readout ("❤90 ⚔18 ×2"), empty for non-combat units (harvesters). Units are pre-sorted strongest-first by the caller. */
+  statsLabel: string;
+  /** Flavor/abilities text (UnitConfig.role, e.g. "heavy infantry - electric"). */
+  abilityLabel: string;
 }
 
 export interface HUDCallbacks {
@@ -24,6 +28,10 @@ export interface HUDPanelState {
   constructionProgress: number | null;
   buildCostLabel: string;
   canAffordBuilding: boolean;
+  /** Full building data shown in-game (per user request), not just its build cost. */
+  hp: number;
+  maxHp: number;
+  visionRadius: number;
   units: HUDUnitDef[];
   unitAffordability: Record<string, boolean>;
   queueLength: number;
@@ -63,6 +71,7 @@ interface TileElements {
 interface TrayElements {
   tray: HTMLDivElement;
   title: HTMLDivElement;
+  statsLine: HTMLDivElement;
   buildRow: HTMLButtonElement;
   queueLabel: HTMLDivElement;
   unitsRow: HTMLDivElement;
@@ -219,6 +228,10 @@ export class HUD {
     title.style.cssText = 'font-size: 11px; font-weight: 700; color: #9fd8ff;';
     tray.appendChild(title);
 
+    const statsLine = document.createElement('div');
+    statsLine.style.cssText = 'font-size: 10px; color: #dff3ffcc;';
+    tray.appendChild(statsLine);
+
     const buildRow = document.createElement('button');
     styleCompactButton(buildRow);
     buildRow.addEventListener('click', () => callbacks.onBeginPlaceBuilding(role));
@@ -256,7 +269,7 @@ export class HUD {
     mergeBtn.addEventListener('click', () => callbacks.onMergeBuildings());
     tray.appendChild(mergeBtn);
 
-    return { tray, title, buildRow, queueLabel, unitsRow, unitButtons: new Map(), rallySetBtn, rallyClearBtn, mergeBtn };
+    return { tray, title, statsLine, buildRow, queueLabel, unitsRow, unitButtons: new Map(), rallySetBtn, rallyClearBtn, mergeBtn };
   }
 
   /** Closes whichever tray is open. Called once placement/rally mode starts, since at that point the player needs a clear view of the ground to click on — the tray would otherwise sit directly over the exact area (often the player's own base) they need to click. */
@@ -315,6 +328,9 @@ export class HUD {
     if (!tray) return;
 
     tray.title.textContent = panelState.buildingName;
+    tray.statsLine.textContent = panelState.built
+      ? `❤ ${Math.ceil(panelState.hp)}/${panelState.maxHp} HP · 👁 ${panelState.visionRadius} vision`
+      : `❤ ${panelState.maxHp} HP · 👁 ${panelState.visionRadius} vision (once built)`;
 
     if (panelState.prebuilt || panelState.built) {
       tray.buildRow.style.display = 'none';
@@ -356,7 +372,7 @@ export class HUD {
       const btn = tray.unitButtons.get(unit.unitId);
       if (!btn) continue;
       btn.style.display = built ? 'block' : 'none';
-      btn.textContent = `${unit.name}\n${unit.costLabel}`;
+      btn.textContent = [unit.name, unit.statsLabel, unit.abilityLabel, unit.costLabel].filter(Boolean).join('\n');
       btn.disabled = panelState.queueFull || !panelState.unitAffordability[unit.unitId];
     }
 
