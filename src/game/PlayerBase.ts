@@ -346,7 +346,7 @@ export class PlayerBase {
   updateHarvesters(dt: number, camera: THREE.Camera): void {
     for (const harvester of this.harvesters) harvester.update(dt, this.economy, camera);
     for (let i = this.harvesters.length - 1; i >= 0; i--) {
-      if (!this.harvesters[i].isAlive()) {
+      if (this.harvesters[i].isReadyForRemoval()) {
         this.scene.remove(this.harvesters[i].mesh);
         this.harvesters.splice(i, 1);
       }
@@ -356,7 +356,7 @@ export class PlayerBase {
   updateCombatUnits(dt: number, camera: THREE.Camera, targetCandidates: Targetable[]): void {
     for (const unit of this.combatUnits) unit.update(dt, camera, targetCandidates);
     for (let i = this.combatUnits.length - 1; i >= 0; i--) {
-      if (!this.combatUnits[i].isAlive()) {
+      if (this.combatUnits[i].isReadyForRemoval()) {
         this.scene.remove(this.combatUnits[i].mesh);
         this.combatUnits.splice(i, 1);
       }

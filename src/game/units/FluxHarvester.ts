@@ -42,7 +42,8 @@ export class FluxHarvester extends Unit implements Targetable {
     if (!this.isAlive()) return;
     this.hp = Math.max(0, this.hp - amount);
     this.healthBar.update(this.hp / this.maxHp);
-    if (this.hp <= 0) this.destroy();
+    if (this.hp <= 0) this.beginDeath();
+    else this.triggerHitFlash();
   }
 
   /** (Re)assigns this harvester to a node/dropoff pair and starts the gather loop. */
@@ -58,7 +59,11 @@ export class FluxHarvester extends Unit implements Targetable {
   }
 
   update(dt: number, economy: PlayerEconomy, camera: THREE.Camera): void {
-    if (!this.isAlive()) return;
+    if (!this.isAlive()) {
+      this.tickDeath(dt);
+      return;
+    }
+    this.tickPresentation(dt);
 
     const arrived = this.updateMovement(dt);
 

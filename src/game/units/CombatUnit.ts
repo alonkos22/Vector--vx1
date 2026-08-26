@@ -9,6 +9,8 @@ import { buildUnitVisual } from './visuals';
 import { acquireTarget } from '../Targeting';
 
 const AGGRO_RANGE_BONUS = 5;
+const LUNGE_DURATION_SEC = 0.18;
+const LUNGE_DISTANCE = 0.28;
 
 type AttackState = 'idle' | 'windup';
 
@@ -34,6 +36,7 @@ export class CombatUnit extends Unit implements Targetable {
   private state: AttackState = 'idle';
   private cooldownRemaining = 0;
   private windupRemaining = 0;
+  private lungeRemaining = 0;
   private lastCandidates: Targetable[] = [];
   private fusing = false;
 
@@ -67,7 +70,8 @@ export class CombatUnit extends Unit implements Targetable {
     if (!this.isAlive()) return;
     this.hp = Math.max(0, this.hp - amount);
     this.healthBar.update(this.hp / this.maxHp);
-    if (this.hp <= 0) this.destroy();
+    if (this.hp <= 0) this.beginDeath();
+    else this.triggerHitFlash();
   }
 
   setTarget(target: Targetable | null): void {
@@ -90,12 +94,17 @@ export class CombatUnit extends Unit implements Targetable {
   /** Silently removes this unit as a completed Convergence fusion's consumed input — no damage/death VFX. */
   consumeForFusion(): void {
     this.hp = 0;
-    this.destroy();
+    this.beginDeath(true);
   }
 
   /** `targetCandidates` lets an idle, unordered unit auto-acquire the nearest enemy in range (targeting: nearest). */
   update(dt: number, camera: THREE.Camera, targetCandidates: Targetable[] = []): void {
-    if (!this.isAlive() || this.fusing) return;
+    if (this.fusing) return;
+    if (!this.isAlive()) {
+      this.tickDeath(dt);
+      return;
+    }
+    this.tickPresentation(dt);
 
     this.lastCandidates = targetCandidates;
     if (this.target && !this.target.isAlive()) this.target = null;
@@ -113,6 +122,7 @@ export class CombatUnit extends Unit implements Targetable {
         this.stopMoving();
         this.faceTarget(this.target.position, dt);
         this.tickAttack(dt);
+        this.tickLunge(dt);
       }
     } else {
       this.updateMovement(dt);
@@ -120,6 +130,18 @@ export class CombatUnit extends Unit implements Targetable {
 
     this.healthBar.setForcedVisible(this.selected);
     this.healthBar.faceCamera(camera);
+  }
+
+  /** Brief forward punch on the moment of impact, easing back to neutral — makes a resolved attack read as a hit rather than a silent timer tick. */
+  private tickLunge(dt: number): void {
+    if (this.lungeRemaining <= 0) {
+      this.mesh.position.copy(this.position);
+      return;
+    }
+    this.lungeRemaining = Math.max(this.lungeRemaining - dt, 0);
+    const t = this.lungeRemaining / LUNGE_DURATION_SEC;
+    const facing = new THREE.Vector3(Math.sin(this.mesh.rotation.y), 0, Math.cos(this.mesh.rotation.y));
+    this.mesh.position.copy(this.position).addScaledVector(facing, t * LUNGE_DISTANCE);
   }
 
   private faceTarget(targetPos: THREE.Vector3, dt: number): void {
@@ -151,6 +173,7 @@ export class CombatUnit extends Unit implements Targetable {
 
   private resolveAttack(): void {
     if (!this.target) return;
+    this.lungeRemaining = LUNGE_DURATION_SEC;
     const targets = this.multiTargetCount > 1 ? this.pickMultiTargets() : [this.target];
 
     const origin = this.position.clone();

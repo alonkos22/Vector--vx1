@@ -14,6 +14,12 @@ export function approachAngle(current: number, target: number, maxDelta: number)
   return current + THREE.MathUtils.clamp(diff, -maxDelta, maxDelta);
 }
 
+const SPAWN_POP_DURATION = 0.25;
+const HIT_FLASH_DURATION = 0.12;
+const HIT_FLASH_INTENSITY_BOOST = 1.6;
+const DEATH_ANIM_DURATION = 0.4;
+const WALK_BOB_AMPLITUDE = 0.08;
+
 function buildSelectionRing(radius: number): THREE.Mesh {
   const geometry = new THREE.RingGeometry(radius * 0.85, radius, 24);
   geometry.rotateX(-Math.PI / 2);
@@ -45,6 +51,14 @@ export abstract class Unit {
   private readonly selectionRing: THREE.Mesh;
   private path: THREE.Vector3[] = [];
   private waypointIndex = 0;
+  private walkPhase = 0;
+
+  private spawnTimer = SPAWN_POP_DURATION;
+  private hitFlashTimer = 0;
+  private dying = false;
+  private deathTimer = 0;
+  private readonly flashMaterials: THREE.MeshStandardMaterial[] = [];
+  private readonly flashBaseIntensity: number[] = [];
 
   constructor(
     unitTypeId: string,
@@ -68,6 +82,14 @@ export abstract class Unit {
     this.mesh.add(this.selectionRing);
     this.mesh.position.copy(this.position);
     this.mesh.userData.unitRef = this;
+    this.mesh.scale.setScalar(0.001);
+
+    this.mesh.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+        this.flashMaterials.push(child.material);
+        this.flashBaseIntensity.push(child.material.emissiveIntensity);
+      }
+    });
 
     registerUnit(this);
   }
@@ -94,6 +116,47 @@ export abstract class Unit {
 
   destroy(): void {
     unregisterUnit(this);
+  }
+
+  /** Brief emissive-glow pulse on a surviving hit, for damage feedback. */
+  protected triggerHitFlash(): void {
+    this.hitFlashTimer = HIT_FLASH_DURATION;
+  }
+
+  /** Spawn pop-in scale and hit-flash decay — call every frame regardless of alive/dead state. */
+  protected tickPresentation(dt: number): void {
+    if (this.spawnTimer > 0) {
+      this.spawnTimer = Math.max(this.spawnTimer - dt, 0);
+      const t = 1 - this.spawnTimer / SPAWN_POP_DURATION;
+      this.mesh.scale.setScalar(Math.max(t, 0.001));
+    }
+
+    if (this.hitFlashTimer > 0) {
+      this.hitFlashTimer = Math.max(this.hitFlashTimer - dt, 0);
+      const boost = (this.hitFlashTimer / HIT_FLASH_DURATION) * HIT_FLASH_INTENSITY_BOOST;
+      for (let i = 0; i < this.flashMaterials.length; i++) this.flashMaterials[i].emissiveIntensity = this.flashBaseIntensity[i] + boost;
+    }
+  }
+
+  /** Starts the death animation (shrink + sink) and immediately stops this unit from affecting separation/pathing steering for others. `instant` skips the visible animation (Convergence fusion consuming its inputs, which has its own VFX). */
+  protected beginDeath(instant = false): void {
+    if (this.dying) return;
+    this.dying = true;
+    this.deathTimer = instant ? 0 : DEATH_ANIM_DURATION;
+    this.destroy();
+  }
+
+  /** Call every frame once `beginDeath` has fired, in place of normal update logic. */
+  protected tickDeath(dt: number): void {
+    this.deathTimer = Math.max(this.deathTimer - dt, 0);
+    const t = 1 - this.deathTimer / DEATH_ANIM_DURATION;
+    this.mesh.scale.setScalar(Math.max(1 - t, 0.001));
+    this.mesh.position.y = this.position.y - t * 0.6;
+  }
+
+  /** True once the death animation has finished — the actual cue for scene.remove + array cleanup. */
+  isReadyForRemoval(): boolean {
+    return this.dying && this.deathTimer <= 0;
   }
 
   /** Local separation steering against every other registered unit — run even when idle so a crowd of stopped units gently un-stacks instead of staying permanently overlapped. */
@@ -133,6 +196,7 @@ export abstract class Unit {
         this.position.x = waypoint.x;
         this.position.z = waypoint.z;
         this.mesh.position.copy(this.position);
+        this.walkPhase = 0;
         this.path = [];
         this.waypointIndex = 0;
         return true;
@@ -141,7 +205,10 @@ export abstract class Unit {
     }
 
     const separation = this.computeSeparation();
-    if (!hasPath && separation.lengthSq() < 0.0001) return false;
+    if (!hasPath) {
+      this.walkPhase = 0;
+      if (separation.lengthSq() < 0.0001) return false;
+    }
 
     const move = desired.add(separation);
     if (move.lengthSq() > 0.0001) move.normalize();
@@ -151,6 +218,11 @@ export abstract class Unit {
     this.position.x += move.x * appliedStep;
     this.position.z += move.z * appliedStep;
     this.mesh.position.copy(this.position);
+
+    if (hasPath) {
+      this.walkPhase += dt * (6 + this.moveSpeed * 0.6);
+      this.mesh.position.y += Math.abs(Math.sin(this.walkPhase)) * WALK_BOB_AMPLITUDE;
+    }
 
     if (move.lengthSq() > 0.0001) {
       const targetAngle = Math.atan2(move.x, move.z);
