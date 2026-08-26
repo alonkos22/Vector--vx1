@@ -9,6 +9,8 @@ export interface HUDUnitDef {
   statsLabel: string;
   /** Flavor/abilities text (UnitConfig.role, e.g. "heavy infantry - electric"). */
   abilityLabel: string;
+  /** PNG data URL of the unit's actual in-game model, rendered by IconRenderer (per user request: a picture next to its name on the button used to build it). */
+  iconUrl: string;
 }
 
 export interface HUDCallbacks {
@@ -32,6 +34,8 @@ export interface HUDPanelState {
   hp: number;
   maxHp: number;
   visionRadius: number;
+  /** PNG data URL of the building's actual in-game model, rendered by IconRenderer. */
+  iconUrl: string;
   units: HUDUnitDef[];
   unitAffordability: Record<string, boolean>;
   queueLength: number;
@@ -65,17 +69,25 @@ interface TileElements {
   tile: HTMLButtonElement;
   progressRing: HTMLDivElement;
   queueBadge: HTMLDivElement;
+  icon: HTMLImageElement;
   label: HTMLDivElement;
+}
+
+interface UnitButtonElements {
+  btn: HTMLButtonElement;
+  icon: HTMLImageElement;
+  text: HTMLDivElement;
 }
 
 interface TrayElements {
   tray: HTMLDivElement;
   title: HTMLDivElement;
+  titleIcon: HTMLImageElement;
   statsLine: HTMLDivElement;
   buildRow: HTMLButtonElement;
   queueLabel: HTMLDivElement;
   unitsRow: HTMLDivElement;
-  unitButtons: Map<string, HTMLButtonElement>;
+  unitButtons: Map<string, UnitButtonElements>;
   rallySetBtn: HTMLButtonElement;
   rallyClearBtn: HTMLButtonElement;
   mergeBtn: HTMLButtonElement;
@@ -197,11 +209,18 @@ export class HUD {
     `;
     tile.appendChild(progressRing);
 
+    const icon = document.createElement('img');
+    icon.style.cssText = `
+      position: absolute; top: 2px; left: 50%; transform: translateX(-50%);
+      width: 30px; height: 30px; object-fit: contain; pointer-events: none;
+    `;
+    tile.appendChild(icon);
+
     const label = document.createElement('div');
     label.style.cssText = `
-      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 600; color: #dff3ff; text-align: center; padding: 2px;
-      line-height: 1.15; text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+      position: absolute; left: 0; right: 0; bottom: 2px;
+      font-size: 9px; font-weight: 600; color: #dff3ff; text-align: center; padding: 0 2px;
+      line-height: 1.1; text-shadow: 0 1px 2px rgba(0,0,0,0.9);
     `;
     tile.appendChild(label);
 
@@ -213,7 +232,7 @@ export class HUD {
     `;
     tile.appendChild(queueBadge);
 
-    return { tileEl: tile, tileParts: { tile, progressRing, queueBadge, label } };
+    return { tileEl: tile, tileParts: { tile, progressRing, queueBadge, icon, label } };
   }
 
   private buildTray(role: BuildingRole, callbacks: HUDCallbacks): TrayElements {
@@ -224,9 +243,14 @@ export class HUD {
       max-height: 46vh; overflow-y: auto;
     `;
 
+    const titleRow = document.createElement('div');
+    titleRow.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+    const titleIcon = document.createElement('img');
+    titleIcon.style.cssText = 'width: 28px; height: 28px; object-fit: contain; flex: none;';
     const title = document.createElement('div');
     title.style.cssText = 'font-size: 11px; font-weight: 700; color: #9fd8ff;';
-    tray.appendChild(title);
+    titleRow.append(titleIcon, title);
+    tray.appendChild(titleRow);
 
     const statsLine = document.createElement('div');
     statsLine.style.cssText = 'font-size: 10px; color: #dff3ffcc;';
@@ -269,7 +293,7 @@ export class HUD {
     mergeBtn.addEventListener('click', () => callbacks.onMergeBuildings());
     tray.appendChild(mergeBtn);
 
-    return { tray, title, statsLine, buildRow, queueLabel, unitsRow, unitButtons: new Map(), rallySetBtn, rallyClearBtn, mergeBtn };
+    return { tray, title, titleIcon, statsLine, buildRow, queueLabel, unitsRow, unitButtons: new Map(), rallySetBtn, rallyClearBtn, mergeBtn };
   }
 
   /** Closes whichever tray is open. Called once placement/rally mode starts, since at that point the player needs a clear view of the ground to click on — the tray would otherwise sit directly over the exact area (often the player's own base) they need to click. */
@@ -310,6 +334,7 @@ export class HUD {
 
     tile.label.textContent = shortLabel(panelState.buildingName);
     tile.tile.style.opacity = panelState.built || panelState.constructionProgress !== null ? '1' : '0.7';
+    if (tile.icon.src !== panelState.iconUrl) tile.icon.src = panelState.iconUrl;
 
     if (panelState.constructionProgress !== null) {
       const deg = Math.floor(panelState.constructionProgress * 360);
@@ -334,6 +359,7 @@ export class HUD {
     if (!tray) return;
 
     tray.title.textContent = panelState.buildingName;
+    if (tray.titleIcon.src !== panelState.iconUrl) tray.titleIcon.src = panelState.iconUrl;
     tray.statsLine.textContent = panelState.built
       ? `❤ ${Math.ceil(panelState.hp)}/${panelState.maxHp} HP · 👁 ${panelState.visionRadius} vision`
       : `❤ ${panelState.maxHp} HP · 👁 ${panelState.visionRadius} vision (once built)`;
@@ -369,17 +395,26 @@ export class HUD {
       for (const unit of panelState.units) {
         const btn = document.createElement('button');
         styleCompactButton(btn);
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        btn.style.gap = '5px';
+        const icon = document.createElement('img');
+        icon.style.cssText = 'width: 26px; height: 26px; object-fit: contain; flex: none;';
+        const text = document.createElement('div');
+        text.style.cssText = 'white-space: pre-line; flex: 1; min-width: 0;';
+        btn.append(icon, text);
         btn.addEventListener('click', () => this.callbacks.onQueueUnit(panelState.role, unit.unitId));
         tray.unitsRow.appendChild(btn);
-        tray.unitButtons.set(unit.unitId, btn);
+        tray.unitButtons.set(unit.unitId, { btn, icon, text });
       }
     }
     for (const unit of panelState.units) {
-      const btn = tray.unitButtons.get(unit.unitId);
-      if (!btn) continue;
-      btn.style.display = built ? 'block' : 'none';
-      btn.textContent = [unit.name, unit.statsLabel, unit.abilityLabel, unit.costLabel].filter(Boolean).join('\n');
-      btn.disabled = panelState.queueFull || !panelState.unitAffordability[unit.unitId];
+      const elements = tray.unitButtons.get(unit.unitId);
+      if (!elements) continue;
+      elements.btn.style.display = built ? 'flex' : 'none';
+      if (elements.icon.src !== unit.iconUrl) elements.icon.src = unit.iconUrl;
+      elements.text.textContent = [unit.name, unit.statsLabel, unit.abilityLabel, unit.costLabel].filter(Boolean).join('\n');
+      elements.btn.disabled = panelState.queueFull || !panelState.unitAffordability[unit.unitId];
     }
 
     const canRally = built && panelState.units.length > 0;
@@ -399,7 +434,7 @@ export class HUD {
       tray.mergeBtn.disabled = !panelState.canAffordMerge;
     }
 
-    for (const btn of [tray.buildRow, ...tray.unitButtons.values(), tray.rallySetBtn, tray.rallyClearBtn, tray.mergeBtn]) {
+    for (const btn of [tray.buildRow, ...[...tray.unitButtons.values()].map((u) => u.btn), tray.rallySetBtn, tray.rallyClearBtn, tray.mergeBtn]) {
       if (btn.style.display === 'none') continue;
       btn.style.opacity = btn.disabled ? '0.5' : '1';
       btn.style.cursor = btn.disabled ? 'default' : 'pointer';

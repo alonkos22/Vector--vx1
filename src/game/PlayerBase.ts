@@ -15,6 +15,20 @@ import { pathGrid } from './Pathfinding';
 import { buildRallyFlag } from './RallyFlag';
 
 /**
+ * How far past a building's nominal footprint to mark the pathfinding grid blocked (per user request:
+ * units should route around buildings they can't enter, never visually clip through one). A flat "+1" isn't
+ * enough on its own: angular buildings are boxy, and a box's corner sits up to ~1.34x footprint from center
+ * (round buildings stay under ~1.25x) — well past a circle of radius footprint+1 for the game's larger
+ * footprints. On top of that, the blocked circle only guarantees the *moving unit's center point* stays
+ * outside it; the unit's own rendered body (selectionRadius, up to 1.6 for the biggest Convergence-fusion
+ * units) still needs room beyond that. This covers both: the shape factor absorbs the worst-case silhouette
+ * overreach, and the flat term covers the largest unit's body radius plus a small buffer.
+ */
+function buildingPathClearance(footprint: number): number {
+  return footprint * 1.35 + 2.4;
+}
+
+/**
  * One faction base's full economy/production/army: everything the human
  * player and the AI opponent both need, so both are driven by the exact
  * same underlying systems and differ only in who calls the methods (UI
@@ -69,7 +83,7 @@ export class PlayerBase {
     const mainConfig = this.buildingsConfig.main;
     this.mainBuilding = new Building(mainConfig, ownerId, this.basePosition, true);
     scene.add(this.mainBuilding.mesh);
-    pathGrid.markCircleBlocked(this.mainBuilding.position, mainConfig.footprint + 1);
+    pathGrid.markCircleBlocked(this.mainBuilding.position, buildingPathClearance(mainConfig.footprint));
   }
 
   /** The prototype's win/lose condition per the build notes: losing the main structure. */
@@ -177,7 +191,7 @@ export class PlayerBase {
     this.economy.spend(config.costCoreEnergy, config.costFactionResource);
     const building = new Building(config, this.ownerId, point, false);
     this.scene.add(building.mesh);
-    pathGrid.markCircleBlocked(building.position, config.footprint + 1);
+    pathGrid.markCircleBlocked(building.position, buildingPathClearance(config.footprint));
     this.buildingsByRole[role] = building;
     return building;
   }
@@ -281,7 +295,7 @@ export class PlayerBase {
     };
     const fused = new Building(fusedConfig, this.ownerId, fusedPosition, false);
     this.scene.add(fused.mesh);
-    pathGrid.markCircleBlocked(fused.position, fusedConfig.footprint + 1);
+    pathGrid.markCircleBlocked(fused.position, buildingPathClearance(fusedConfig.footprint));
     this.buildingsByRole.heavyProduction = fused;
     return true;
   }

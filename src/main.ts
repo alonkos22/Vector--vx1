@@ -34,6 +34,9 @@ import { Minimap } from './ui/Minimap';
 import { ControlGroupBar } from './ui/ControlGroupBar';
 import { soundManager } from './game/SoundManager';
 import { preloadImportedUnitModels } from './game/ImportedUnitModels';
+import { getIcon } from './game/IconRenderer';
+import { buildBuildingVisual } from './game/buildingVisuals';
+import { buildUnitVisual } from './game/units/visuals';
 
 window.addEventListener('pointerdown', () => soundManager.unlock(), { once: true });
 window.addEventListener('keydown', () => soundManager.unlock(), { once: true });
@@ -767,6 +770,7 @@ function buildPanelState(role: BuildingRole): HUDPanelState {
         costLabel: formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec),
         ...unitStatsAndAbilities(unitConfig),
         power: unitPowerScore(unitConfig),
+        iconUrl: getIcon(`unit:${unitId}`, () => buildUnitVisual(unitId)),
       };
     })
     .sort((a, b) => b.power - a.power);
@@ -791,6 +795,10 @@ function buildPanelState(role: BuildingRole): HUDPanelState {
     hp: building?.hp ?? config.maxHp,
     maxHp: config.maxHp,
     visionRadius: config.visionRadius,
+    iconUrl: getIcon(
+      `building:${config.id}`,
+      () => buildBuildingVisual(role, config.footprint, config.color, config.materialRoughness, config.materialMetalness, config.shapeFamily).group,
+    ),
     units,
     unitAffordability,
     queueLength: building?.queueLength() ?? 0,
