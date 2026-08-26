@@ -6,8 +6,8 @@ import { CoreZone } from './game/CoreZone';
 import { BIOMES } from './config/biomes';
 import { FACTIONS } from './config/factions';
 import { BUILDINGS_BY_FACTION, BUILDING_ROLES, type BuildingRole, type BuildingConfig } from './config/buildings';
-import { CYBER_NEXUS_UNITS } from './config/units';
-import { CYBER_NEXUS_CONVERGENCE } from './config/convergence';
+import { UNITS_BY_FACTION } from './config/units';
+import { CONVERGENCE_BY_FACTION } from './config/convergence';
 import { BUILDING_FUSION_BY_FACTION } from './config/buildingFusion';
 import { PlayerBase } from './game/PlayerBase';
 import { CombatUnit } from './game/units/CombatUnit';
@@ -39,7 +39,18 @@ function formatCost(costCoreEnergy: number, costFactionResource: number, buildTi
 }
 
 const MAP_HALF_EXTENT = 100;
-const PLAYER_FACTION_ID = 'cyber-nexus';
+
+const app = document.querySelector<HTMLDivElement>('#app')!;
+app.innerHTML = '';
+
+/**
+ * Everything below depends on which faction the player picked on the
+ * faction-select screen (buildings, units, convergence recipes, home biome),
+ * so it can't run until that choice is made — hence wrapping the whole
+ * game setup + loop in a function invoked from showFactionSelectScreen()
+ * at the bottom of this file, instead of running at module load time.
+ */
+function startGame(PLAYER_FACTION_ID: string): void {
 /**
  * The AI opponent's faction (Milestone 9's live proof that PlayerBase/
  * AIController are faction-agnostic): picked at random from every other
@@ -49,15 +60,14 @@ const PLAYER_FACTION_ID = 'cyber-nexus';
 const AI_CANDIDATE_FACTION_IDS = Object.keys(FACTIONS).filter((id) => id !== PLAYER_FACTION_ID);
 const AI_FACTION_ID = AI_CANDIDATE_FACTION_IDS[Math.floor(Math.random() * AI_CANDIDATE_FACTION_IDS.length)];
 const FACTION = FACTIONS[PLAYER_FACTION_ID];
+const PLAYER_UNITS = UNITS_BY_FACTION[PLAYER_FACTION_ID];
+const PLAYER_CONVERGENCE = CONVERGENCE_BY_FACTION[PLAYER_FACTION_ID];
 const PLAYER_BASE_POSITION = new THREE.Vector3(-55, 0, -55);
 const AI_BASE_POSITION = new THREE.Vector3(55, 0, 55);
 const STARTING_HARVESTERS = 2;
 const STARTING_CORE_ENERGY = 150;
 /** Not specified in the design doc — a tunable homebrew match length. */
 const MATCH_DURATION_SEC = 900;
-
-const app = document.querySelector<HTMLDivElement>('#app')!;
-app.innerHTML = '';
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -365,7 +375,7 @@ function updateSelectionHUD(): void {
   }
   const byLabel = new Map<string, number>();
   for (const unit of selection.selected) {
-    const baseName = CYBER_NEXUS_UNITS[unit.unitTypeId]?.name ?? unit.unitTypeId;
+    const baseName = PLAYER_UNITS[unit.unitTypeId]?.name ?? unit.unitTypeId;
     const rankSuffix = unit instanceof CombatUnit && unit.rankName() !== 'Recruit' ? ` (${unit.rankName()})` : '';
     const label = `${baseName}${rankSuffix}`;
     byLabel.set(label, (byLabel.get(label) ?? 0) + 1);
@@ -374,7 +384,7 @@ function updateSelectionHUD(): void {
   hud.setSelectionInfo(`Selected: ${parts.join(', ')}`);
 
   const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
-  const recipe = convergence.findMatchingRecipe(CYBER_NEXUS_CONVERGENCE, selectedCombat);
+  const recipe = convergence.findMatchingRecipe(PLAYER_CONVERGENCE, selectedCombat);
   const canFuse = recipe && convergence.canAffordAndPlace(recipe, selectedCombat[0].position, playerBase.economy, playerBase.allBuildings());
 
   if (recipe && canFuse) {
@@ -528,12 +538,12 @@ function buildPanelState(role: BuildingRole): HUDPanelState {
   const built = building?.isComplete ?? false;
 
   const units = config.produces.map((unitId) => {
-    const unitConfig = CYBER_NEXUS_UNITS[unitId];
+    const unitConfig = PLAYER_UNITS[unitId];
     return { unitId, name: unitConfig.name, costLabel: formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec) };
   });
   const unitAffordability: Record<string, boolean> = {};
   for (const unitId of config.produces) {
-    const unitConfig = CYBER_NEXUS_UNITS[unitId];
+    const unitConfig = PLAYER_UNITS[unitId];
     unitAffordability[unitId] = playerBase.economy.canAfford(unitConfig.costCoreEnergy, unitConfig.costFactionResource);
   }
 
@@ -641,7 +651,7 @@ function showStartScreen(): void {
   `;
 
   const subtitle = document.createElement('div');
-  subtitle.textContent = "You play Cyber-Nexus. Choose the AI opponent's difficulty to begin.";
+  subtitle.textContent = `You play ${FACTION.name}. Choose the AI opponent's difficulty to begin.`;
   subtitle.style.cssText = 'font-size: 14px; color: #dff3ffcc;';
 
   const buttonRow = document.createElement('div');
@@ -797,3 +807,61 @@ function animate(): void {
 
 showStartScreen();
 animate();
+}
+
+/** Faction-select screen, shown before startGame() so it can be picked without any game state existing yet. */
+function showFactionSelectScreen(onPick: (factionId: string) => void): void {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 22px;
+    background: radial-gradient(ellipse at center, rgba(10,16,24,0.9) 0%, rgba(5,7,10,0.98) 100%);
+    font-family: 'Segoe UI', Roboto, sans-serif; z-index: 200;
+  `;
+
+  const title = document.createElement('div');
+  title.textContent = 'VECTOR VX1';
+  title.style.cssText = `
+    font-size: 48px; font-weight: 800; letter-spacing: 8px; color: #9fe8ff;
+    text-shadow: 0 0 24px #4fc3ffaa;
+  `;
+
+  const subtitle = document.createElement('div');
+  subtitle.textContent = 'Choose your faction.';
+  subtitle.style.cssText = 'font-size: 14px; color: #dff3ffcc;';
+
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; max-width: 720px;';
+
+  for (const factionId of Object.keys(FACTIONS)) {
+    const faction = FACTIONS[factionId];
+    const swatch = `#${faction.colorPrimary.toString(16).padStart(6, '0')}`;
+    const btn = document.createElement('button');
+    btn.style.cssText = `
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      font-size: 14px; font-weight: 700; color: #dff3ff;
+      background: rgba(10,16,24,0.75); border: 2px solid ${swatch}; border-radius: 10px;
+      padding: 16px 20px; cursor: pointer; touch-action: manipulation; width: 150px;
+    `;
+    const swatchEl = document.createElement('div');
+    swatchEl.style.cssText = `width: 36px; height: 36px; border-radius: 50%; background: ${swatch}; box-shadow: 0 0 14px ${swatch}aa;`;
+    const nameEl = document.createElement('div');
+    nameEl.textContent = faction.name;
+    const flavorEl = document.createElement('div');
+    flavorEl.textContent = faction.factionResourceName;
+    flavorEl.style.cssText = 'font-size: 11px; font-weight: 400; color: #9fd8ffaa;';
+    btn.append(swatchEl, nameEl, flavorEl);
+    btn.addEventListener('click', () => {
+      soundManager.unlock();
+      soundManager.playUIClick();
+      overlay.remove();
+      onPick(factionId);
+    });
+    grid.appendChild(btn);
+  }
+
+  overlay.append(title, subtitle, grid);
+  app.appendChild(overlay);
+}
+
+showFactionSelectScreen((factionId) => startGame(factionId));
