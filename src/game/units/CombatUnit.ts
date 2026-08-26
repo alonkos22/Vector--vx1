@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Unit, approachAngle, TURN_RATE_RAD_PER_SEC, computePowerScale } from './Unit';
+import { elevation } from '../Elevation';
 import type { UnitConfig } from '../../config/units';
 import type { AttackVfxStyle } from '../../config/factions';
 import type { Targetable } from '../Targetable';
@@ -13,6 +14,9 @@ import { acquireTarget } from '../Targeting';
 const AGGRO_RANGE_BONUS = 5;
 const LUNGE_DURATION_SEC = 0.18;
 const LUNGE_DISTANCE = 0.28;
+
+/** Damage bonus for attacking from a plateau down onto a target on lower ground (per user request: fortify on high ground). */
+const HIGH_GROUND_DAMAGE_MULTIPLIER = 1.25;
 
 /**
  * Veterancy: units earn xp from damage dealt (+ a kill bonus) and rank up at
@@ -208,14 +212,16 @@ export class CombatUnit extends Unit implements Targetable {
 
   /** Brief forward punch on the moment of impact, easing back to neutral — makes a resolved attack read as a hit rather than a silent timer tick. */
   private tickLunge(dt: number): void {
+    const grounded = this.position.clone();
+    grounded.y += this.groundHeight();
     if (this.lungeRemaining <= 0) {
-      this.mesh.position.copy(this.position);
+      this.mesh.position.copy(grounded);
       return;
     }
     this.lungeRemaining = Math.max(this.lungeRemaining - dt, 0);
     const t = this.lungeRemaining / LUNGE_DURATION_SEC;
     const facing = new THREE.Vector3(Math.sin(this.mesh.rotation.y), 0, Math.cos(this.mesh.rotation.y));
-    this.mesh.position.copy(this.position).addScaledVector(facing, t * LUNGE_DISTANCE * this.lungePowerScale);
+    this.mesh.position.copy(grounded).addScaledVector(facing, t * LUNGE_DISTANCE * this.lungePowerScale);
   }
 
   private faceTarget(targetPos: THREE.Vector3, dt: number): void {
@@ -251,15 +257,20 @@ export class CombatUnit extends Unit implements Targetable {
     this.lungePowerScale = computePowerScale(this.damage);
     const targets = this.multiTargetCount > 1 ? this.pickMultiTargets() : [this.target];
 
+    const myHeight = this.groundHeight();
     const origin = this.position.clone();
-    origin.y = 1.3;
+    origin.y = 1.3 + myHeight;
     for (const target of targets) {
+      const targetHeight = elevation.getHeightAt(target.position.x, target.position.z);
+      const onHighGround = myHeight > targetHeight + 0.1;
+      const damage = onHighGround ? this.damage * HIGH_GROUND_DAMAGE_MULTIPLIER : this.damage;
+
       const wasAlive = target.isAlive();
-      target.takeDamage(this.damage);
+      target.takeDamage(damage);
       const impact = target.position.clone();
-      impact.y = 1.1;
+      impact.y = 1.1 + targetHeight;
       this.effects.spawnAttackHit(this.attackVfxStyle, origin, impact, this.lungePowerScale);
-      this.gainXp(this.damage * XP_PER_DAMAGE_DEALT + (wasAlive && !target.isAlive() ? KILL_BONUS_XP : 0));
+      this.gainXp(damage * XP_PER_DAMAGE_DEALT + (wasAlive && !target.isAlive() ? KILL_BONUS_XP : 0));
     }
   }
 

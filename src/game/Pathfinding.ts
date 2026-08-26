@@ -118,6 +118,11 @@ export class PathGrid {
     return this.blocked[this.idx(cx, cz)] === 0;
   }
 
+  /** Whether a world point sits on a blocked cell (mountain, existing building footprint, ...) — for placement checks outside the pathfinder itself. */
+  isBlocked(point: THREE.Vector3): boolean {
+    return !this.isWalkable(this.worldToCellX(point.x), this.worldToCellZ(point.z));
+  }
+
   private findNearestWalkable(cx: number, cz: number): { cx: number; cz: number } | null {
     if (this.isWalkable(cx, cz)) return { cx, cz };
     for (let r = 1; r < 20; r++) {

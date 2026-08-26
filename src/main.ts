@@ -15,6 +15,8 @@ import { TrainingDummy } from './game/units/TrainingDummy';
 import { Unit } from './game/units/Unit';
 import type { Targetable } from './game/Targetable';
 import { pathGrid } from './game/Pathfinding';
+import { elevation } from './game/Elevation';
+import { buildTerrainFeatures } from './game/TerrainFeatures';
 import { EffectManager } from './game/CombatVFX';
 import { SelectionManager } from './game/Selection';
 import { ConvergenceManager } from './game/Convergence';
@@ -167,6 +169,8 @@ app.appendChild(matchStatusEl);
 
 pathGrid.init(MAP_HALF_EXTENT, 2);
 pathGrid.markCircleBlocked(new THREE.Vector3(0, 0, 0), 9);
+elevation.init(MAP_HALF_EXTENT, 2);
+scene.add(buildTerrainFeatures());
 
 // ---------------------------------------------------------------------------
 // Player + AI bases — identical economy/production/army systems (PlayerBase),
@@ -263,6 +267,10 @@ function cancelPlacement(): void {
 
 function confirmPlacement(point: THREE.Vector3): void {
   if (!placementTarget) return;
+  if (pathGrid.isBlocked(point) || elevation.getHeightAt(point.x, point.z) > 0) {
+    hud.setStatus("Can't build on mountains or high ground — pick a flat spot.");
+    return;
+  }
   playerBase.constructBuilding(placementTarget, point);
   cancelPlacement();
 }

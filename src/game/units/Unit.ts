@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { pathGrid } from '../Pathfinding';
+import { elevation } from '../Elevation';
 import { registerUnit, unregisterUnit, allUnits } from './UnitRegistry';
 import { soundManager } from '../SoundManager';
 
@@ -90,7 +91,7 @@ export abstract class Unit {
     this.selectionRing = buildSelectionRing(selectionRadius);
     this.selectionRing.visible = false;
     this.mesh.add(this.selectionRing);
-    this.mesh.position.copy(this.position);
+    this.syncMeshToGround();
     this.mesh.userData.unitRef = this;
     this.mesh.scale.setScalar(0.001);
 
@@ -166,12 +167,22 @@ export abstract class Unit {
     this.deathTimer = Math.max(this.deathTimer - dt, 0);
     const t = 1 - this.deathTimer / DEATH_ANIM_DURATION;
     this.mesh.scale.setScalar(Math.max(1 - t, 0.001));
-    this.mesh.position.y = this.position.y - t * 0.6;
+    this.mesh.position.y = this.position.y + this.groundHeight() - t * 0.6;
   }
 
   /** True once the death animation has finished — the actual cue for scene.remove + array cleanup. */
   isReadyForRemoval(): boolean {
     return this.dying && this.deathTimer <= 0;
+  }
+
+  /** Terrain height under the unit's current x/z (0 on flat ground, up to a plateau's height on top of one) — the "high ground" a fortified unit is standing on. Gameplay logic (this.position.y) never changes; only the rendered mesh height and the CombatUnit attack-damage bonus consult this. */
+  protected groundHeight(): number {
+    return elevation.getHeightAt(this.position.x, this.position.z);
+  }
+
+  /** Copies x/z from `position` into the mesh and lifts it to the terrain height under it — the single place elevation touches rendering. */
+  private syncMeshToGround(): void {
+    this.mesh.position.set(this.position.x, this.position.y + this.groundHeight(), this.position.z);
   }
 
   /** Local separation steering against every other registered unit — run even when idle so a crowd of stopped units gently un-stacks instead of staying permanently overlapped. */
@@ -210,7 +221,7 @@ export abstract class Unit {
       if (distance <= step && isFinalWaypoint) {
         this.position.x = waypoint.x;
         this.position.z = waypoint.z;
-        this.mesh.position.copy(this.position);
+        this.syncMeshToGround();
         this.walkPhase = 0;
         this.path = [];
         this.waypointIndex = 0;
@@ -232,7 +243,7 @@ export abstract class Unit {
     const appliedStep = hasPath ? step : this.moveSpeed * dt * 0.5;
     this.position.x += move.x * appliedStep;
     this.position.z += move.z * appliedStep;
-    this.mesh.position.copy(this.position);
+    this.syncMeshToGround();
 
     if (hasPath) {
       this.walkPhase += dt * (6 + this.moveSpeed * 0.6);
