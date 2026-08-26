@@ -23,7 +23,14 @@ export class Minimap {
   private readonly ctx: CanvasRenderingContext2D;
   private mapHalfExtent = 100;
 
-  constructor(container: HTMLElement, onNavigate: (worldX: number, worldZ: number) => void) {
+  /**
+   * `onNavigate` (left-click/drag, or any touch tap) recenters the camera.
+   * `onCommand` (right-click) issues a move/attack order to the current
+   * selection at that world point, mirroring right-click on the main
+   * viewport — lets the player command the army without panning off an
+   * important view first.
+   */
+  constructor(container: HTMLElement, onNavigate: (worldX: number, worldZ: number) => void, onCommand: (worldX: number, worldZ: number) => void) {
     this.canvas = document.createElement('canvas');
     this.canvas.width = SIZE_PX;
     this.canvas.height = SIZE_PX;
@@ -35,18 +42,21 @@ export class Minimap {
     container.appendChild(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
 
-    const handlePointer = (e: PointerEvent): void => {
+    const worldPointFromEvent = (e: PointerEvent | MouseEvent): [number, number] => {
       const rect = this.canvas.getBoundingClientRect();
       const u = (e.clientX - rect.left) / rect.width;
       const v = (e.clientY - rect.top) / rect.height;
-      onNavigate((u * 2 - 1) * this.mapHalfExtent, (v * 2 - 1) * this.mapHalfExtent);
+      return [(u * 2 - 1) * this.mapHalfExtent, (v * 2 - 1) * this.mapHalfExtent];
     };
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      handlePointer(e);
+      const [x, z] = worldPointFromEvent(e);
+      if (e.button === 2) onCommand(x, z);
+      else onNavigate(x, z);
     });
     this.canvas.addEventListener('pointermove', (e) => {
-      if (e.buttons === 1) handlePointer(e);
+      if (e.buttons === 1) onNavigate(...worldPointFromEvent(e));
     });
   }
 

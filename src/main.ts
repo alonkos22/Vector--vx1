@@ -431,6 +431,12 @@ function issueOrderAt(clientX: number, clientY: number): void {
 
   const point = screenToGround(clientX, clientY);
   if (!point) return;
+  issueMoveOrderAtPoint(point, selectedCombat);
+}
+
+/** Formation move order to a known ground point — shared by the main viewport's right-click and the minimap's right-click, which has no screen-space raycast to pick an attack target from and so is always a move order. */
+function issueMoveOrderAtPoint(point: THREE.Vector3, selectedCombat: CombatUnit[]): void {
+  if (selectedCombat.length === 0) return;
   const offsets = computeFormationOffsets(selectedCombat.length);
   selectedCombat.forEach((unit, i) => {
     unit.setTarget(null);
@@ -490,9 +496,16 @@ const hud = new HUD(app, BUILDING_ROLES, {
   onMergeBuildings: mergeBuildings,
 });
 
-const minimap = new Minimap(app, (worldX, worldZ) => {
-  rtsCamera.target.set(worldX, 0, worldZ);
-});
+const minimap = new Minimap(
+  app,
+  (worldX, worldZ) => {
+    rtsCamera.target.set(worldX, 0, worldZ);
+  },
+  (worldX, worldZ) => {
+    const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
+    issueMoveOrderAtPoint(new THREE.Vector3(worldX, 0, worldZ), selectedCombat);
+  },
+);
 
 function buildPanelState(role: BuildingRole): HUDPanelState {
   const config = currentBuildingConfig(role);
@@ -547,6 +560,54 @@ window.addEventListener('resize', onResize);
 
 let matchOver = false;
 let gameStarted = false;
+
+// ---------------------------------------------------------------------------
+// Under-attack alert: the human player has no way to notice a raid on a
+// part of the base the camera isn't currently looking at, unlike the AI
+// (which sees the whole map every frame in checkForThreats). Same hp-delta
+// detection approach, gated by a distance-from-view check and a cooldown so
+// it doesn't spam while a fight is already on-screen.
+// ---------------------------------------------------------------------------
+
+const playerLastHpByEntity = new Map<Targetable, number>();
+let underAttackCooldown = 0;
+let alertTargetPos: THREE.Vector3 | null = null;
+
+const alertBanner = document.createElement('div');
+alertBanner.style.cssText = `
+  position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+  background: rgba(120,10,10,0.92); border: 1px solid #ff6f6f; border-radius: 6px;
+  padding: 8px 18px; font-size: 14px; font-weight: 700; color: #ffdede;
+  font-family: 'Segoe UI', Roboto, sans-serif; cursor: pointer; display: none;
+  z-index: 50; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+`;
+alertBanner.textContent = '⚠ Base under attack — click to view';
+app.appendChild(alertBanner);
+alertBanner.addEventListener('click', () => {
+  if (alertTargetPos) rtsCamera.target.copy(alertTargetPos);
+  alertBanner.style.display = 'none';
+});
+
+function checkPlayerUnderAttack(dt: number): void {
+  underAttackCooldown = Math.max(0, underAttackCooldown - dt);
+  const entities: Targetable[] = [...playerBase.allBuildings(), ...playerBase.harvesters, ...playerBase.combatUnits];
+  let threatPos: THREE.Vector3 | null = null;
+  for (const entity of entities) {
+    const previousHp = playerLastHpByEntity.get(entity);
+    if (previousHp !== undefined && entity.hp < previousHp) threatPos = entity.position.clone();
+    playerLastHpByEntity.set(entity, entity.hp);
+  }
+  if (!threatPos || underAttackCooldown > 0) return;
+  if (rtsCamera.target.distanceTo(threatPos) < 25) return; // already looking at the fight
+
+  underAttackCooldown = 6;
+  alertTargetPos = threatPos;
+  alertBanner.style.display = 'block';
+  soundManager.playAlert();
+  setTimeout(() => {
+    alertBanner.style.display = 'none';
+  }, 4000);
+}
 
 function showStartScreen(): void {
   const overlay = document.createElement('div');
@@ -675,6 +736,7 @@ function animate(): void {
     convergence.update(dt);
 
     aiController.update(dt);
+    checkPlayerUnderAttack(dt);
 
     fogOfWar.update(playerBase.visionSources());
     for (const harvester of aiBase.harvesters) harvester.mesh.visible = fogOfWar.isVisible(harvester.position);

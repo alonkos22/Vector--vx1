@@ -109,6 +109,12 @@ class SoundManager {
     this.tone(200, 'sawtooth', 0.4, 0.22, 900);
   }
 
+  /** Urgent two-tone alert — the player's base is under attack off-screen. */
+  playAlert(): void {
+    this.tone(880, 'square', 0.1, 0.22);
+    setTimeout(() => this.tone(660, 'square', 0.12, 0.22), 130);
+  }
+
   playUIClick(): void {
     this.tone(700, 'square', 0.035, 0.08);
   }
