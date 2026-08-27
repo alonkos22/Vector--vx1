@@ -863,6 +863,9 @@ function buildBuildingDetail(role: BuildingRole, config: BuildingConfig): HUDDet
   lines.push(`❤ HP: ${config.maxHp}`);
   lines.push(`👁 Vision: ${config.visionRadius}`);
   if (config.produces.length > 0) lines.push(`🏭 Produces: ${config.produces.map((id) => PLAYER_UNITS[id].name).join(', ')}`);
+  if (role === 'resourceDropoff' && FACTION.economyMode === 'passive') {
+    lines.push(`☀ Doubles your passive Core Energy + ${FACTION.factionResourceName} trickle once complete (this faction has no harvester unit to scale income with instead)`);
+  }
 
   let fusion: HUDDetailInfo['fusion'] = null;
   if (role === 'basicProduction' || role === 'heavyProduction') {

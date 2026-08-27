@@ -28,6 +28,9 @@ function buildingPathClearance(footprint: number): number {
   return footprint * 1.35 + 2.4;
 }
 
+/** How much a passive-economy faction's trickle rates multiply once its resourceDropoff building is complete. */
+const PASSIVE_ECONOMY_DROPOFF_BOOST = 2;
+
 /**
  * One faction base's full economy/production/army: everything the human
  * player and the AI opponent both need, so both are driven by the exact
@@ -352,8 +355,15 @@ export class PlayerBase {
     }
 
     if (this.factionConfig.economyMode === 'passive') {
-      this.economy.addCoreEnergy((this.factionConfig.passiveCoreEnergyPerSec ?? 0) * dt);
-      this.economy.addFactionResource((this.factionConfig.passiveFactionResourcePerSec ?? 0) * dt);
+      // A passive economy can't be scaled by training more harvesters (there are none), so it would
+      // otherwise never improve no matter what the player builds — unlike every other faction, where
+      // banking Core Energy into more harvesters directly raises income. Building the resourceDropoff-role
+      // building (the player's one dedicated economy structure even without harvesters to feed it) is the
+      // passive faction's equivalent investment: it doubles both passive trickle rates once complete.
+      const dropoffBuilt = this.getBuildingByRole('resourceDropoff')?.isComplete ?? false;
+      const boost = dropoffBuilt ? PASSIVE_ECONOMY_DROPOFF_BOOST : 1;
+      this.economy.addCoreEnergy((this.factionConfig.passiveCoreEnergyPerSec ?? 0) * boost * dt);
+      this.economy.addFactionResource((this.factionConfig.passiveFactionResourcePerSec ?? 0) * boost * dt);
     }
   }
 
