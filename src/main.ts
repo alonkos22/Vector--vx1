@@ -469,18 +469,37 @@ const convergence = new ConvergenceManager(scene, effects, (outputUnitId, positi
 function updateSelectionHUD(): void {
   if (selection.selected.size === 0) {
     hud.setSelectionInfo('');
+    hud.setPortrait(null);
     hud.setConvergenceOption(null);
     return;
   }
-  const byLabel = new Map<string, number>();
-  for (const unit of selection.selected) {
-    const baseName = PLAYER_UNITS[unit.unitTypeId]?.name ?? unit.unitTypeId;
-    const rankSuffix = unit instanceof CombatUnit && unit.rankName() !== 'Recruit' ? ` (${unit.rankName()})` : '';
-    const label = `${baseName}${rankSuffix}`;
-    byLabel.set(label, (byLabel.get(label) ?? 0) + 1);
+
+  if (selection.selected.size === 1) {
+    // Single selection (per user request): a live portrait instead of the plain-text summary.
+    const [unit] = selection.selected;
+    const unitConfig = PLAYER_UNITS[unit.unitTypeId];
+    const detail = buildUnitDetail(unitConfig);
+    // hp/maxHp live on CombatUnit and FluxHarvester individually, not on the shared Unit base type.
+    const { hp, maxHp } = unit instanceof CombatUnit || unit instanceof FluxHarvester ? unit : { hp: 0, maxHp: 0 };
+    hud.setSelectionInfo('');
+    hud.setPortrait({
+      ...detail,
+      lines: detail.lines.filter((line) => !line.startsWith('❤')), // the portrait's own hp bar replaces this line
+      hp,
+      maxHp,
+    });
+  } else {
+    hud.setPortrait(null);
+    const byLabel = new Map<string, number>();
+    for (const unit of selection.selected) {
+      const baseName = PLAYER_UNITS[unit.unitTypeId]?.name ?? unit.unitTypeId;
+      const rankSuffix = unit instanceof CombatUnit && unit.rankName() !== 'Recruit' ? ` (${unit.rankName()})` : '';
+      const label = `${baseName}${rankSuffix}`;
+      byLabel.set(label, (byLabel.get(label) ?? 0) + 1);
+    }
+    const parts = [...byLabel.entries()].map(([label, n]) => `${n}× ${label}`);
+    hud.setSelectionInfo(`Selected: ${parts.join(', ')}`);
   }
-  const parts = [...byLabel.entries()].map(([label, n]) => `${n}× ${label}`);
-  hud.setSelectionInfo(`Selected: ${parts.join(', ')}`);
 
   const selectedCombat = [...selection.selected].filter((u): u is CombatUnit => u instanceof CombatUnit);
   const recipe = convergence.findMatchingRecipe(PLAYER_CONVERGENCE, selectedCombat);
@@ -1128,6 +1147,7 @@ function animate(): void {
       coreEnergy: playerBase.economy.coreEnergy,
       factionResource: playerBase.economy.factionResource,
       factionResourceLabel: FACTION.factionResourceName,
+      factionResourceColor: FACTION.colorPrimary,
       unitCount: playerBase.harvesters.length + playerBase.combatUnits.length,
       supplyUsed: playerBase.supplyUsed(),
       panels: BUILDING_ROLES.map(buildPanelState),

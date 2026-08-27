@@ -66,12 +66,33 @@ export interface HUDState {
   coreEnergy: number;
   factionResource: number;
   factionResourceLabel: string;
+  /** Faction's primary color (hex, e.g. 0x2ea3ff) — tints the faction-resource icon so it reads as "this race's material", per user request for graphic resource icons. */
+  factionResourceColor: number;
   unitCount: number;
   supplyUsed: number;
   panels: HUDPanelState[];
 }
 
+/** Live version of HUDDetailInfo for the always-on portrait panel — same cost/attack/class breakdown, plus the unit's current hp so its health bar actually moves as it takes damage (the long-press popup only ever shows static max values). */
+export interface HUDPortraitInfo extends HUDDetailInfo {
+  hp: number;
+  maxHp: number;
+}
+
 const TILE_SIZE = 56;
+
+function hexColor(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+/** Small inline SVG icons for the resource bar (per user request: graphic icons alongside the text, not replacing it). Self-contained strings — no external assets, no build-time cost. */
+function coreEnergyIconSvg(): string {
+  return `<svg viewBox="0 0 24 24" width="18" height="18"><polygon points="12,1 22,7 22,17 12,23 2,17 2,7" fill="#173a52" stroke="#4fc3ff" stroke-width="1.5"/><polygon points="13,4 7,13 11,13 10,20 17,10 13,10" fill="#9fe8ff"/></svg>`;
+}
+function factionResourceIconSvg(color: number): string {
+  const fill = hexColor(color);
+  return `<svg viewBox="0 0 24 24" width="18" height="18"><polygon points="12,2 20,9 16,22 8,22 4,9" fill="${fill}" stroke="#dff3ff" stroke-width="1" opacity="0.95"/><polygon points="12,2 20,9 12,12" fill="#ffffff" opacity="0.35"/></svg>`;
+}
 
 function shortLabel(name: string): string {
   // "Nexus Core" -> "Core", "Cyber-Forge" -> "Forge", "EMP Arc Turret" -> "Turret" — last word reads best on a small tile.
@@ -120,9 +141,24 @@ interface TrayElements {
 export class HUD {
   private readonly coreEnergyEl: HTMLSpanElement;
   private readonly factionResourceEl: HTMLSpanElement;
+  private readonly factionResourceIcon: HTMLSpanElement;
+  private lastFactionResourceColor: number | null = null;
   private readonly supplyEl: HTMLSpanElement;
   private readonly statusEl: HTMLDivElement;
   private readonly selectionEl: HTMLDivElement;
+
+  // --- Portrait panel (per user request: a live picture + stats for the single selected unit) ---
+  private readonly portraitEl: HTMLDivElement;
+  private readonly portraitIcon: HTMLImageElement;
+  private readonly portraitTitle: HTMLDivElement;
+  private readonly portraitSubtitle: HTMLDivElement;
+  private readonly portraitHpBarFill: HTMLDivElement;
+  private readonly portraitHpText: HTMLDivElement;
+  private readonly portraitLines: HTMLDivElement;
+  private readonly portraitFusionRow: HTMLDivElement;
+  private readonly portraitFusionIcon: HTMLImageElement;
+  private readonly portraitFusionLabel: HTMLDivElement;
+
   private readonly convergeButton: HTMLButtonElement;
   private readonly tiles = new Map<BuildingRole, TileElements>();
   private readonly trays = new Map<BuildingRole, TrayElements>();
@@ -154,13 +190,26 @@ export class HUD {
     resourceBar.style.cssText = `
       background: rgba(10,16,24,0.75); border: 1px solid #2ea3ff55;
       border-radius: 6px; padding: 10px 16px; font-size: 15px;
-      display: flex; gap: 22px; pointer-events: auto;
+      display: flex; gap: 22px; align-items: center; pointer-events: auto;
     `;
+    const coreEnergyIcon = document.createElement('span');
+    coreEnergyIcon.innerHTML = coreEnergyIconSvg();
+    coreEnergyIcon.style.cssText = 'display: inline-flex; margin-right: 6px; vertical-align: middle;';
     this.coreEnergyEl = document.createElement('span');
+    const coreEnergyGroup = document.createElement('span');
+    coreEnergyGroup.style.cssText = 'display: inline-flex; align-items: center;';
+    coreEnergyGroup.append(coreEnergyIcon, this.coreEnergyEl);
+
+    this.factionResourceIcon = document.createElement('span');
+    this.factionResourceIcon.style.cssText = 'display: inline-flex; margin-right: 6px; vertical-align: middle;';
     this.factionResourceEl = document.createElement('span');
+    const factionResourceGroup = document.createElement('span');
+    factionResourceGroup.style.cssText = 'display: inline-flex; align-items: center;';
+    factionResourceGroup.append(this.factionResourceIcon, this.factionResourceEl);
+
     this.supplyEl = document.createElement('span');
     this.supplyEl.style.color = '#9fd8ff';
-    resourceBar.append(this.coreEnergyEl, this.factionResourceEl, this.supplyEl);
+    resourceBar.append(coreEnergyGroup, factionResourceGroup, this.supplyEl);
     root.appendChild(resourceBar);
 
     this.statusEl = document.createElement('div');
@@ -178,6 +227,61 @@ export class HUD {
       pointer-events: none; display: none; user-select: none;
     `;
     container.appendChild(this.selectionEl);
+
+    // --- Portrait panel (per user request): a bigger, always-live picture of the single selected unit —
+    // model, health bar, and the same cost/attack/class breakdown as the long-press popup, but with a
+    // health bar that actually moves as the unit takes damage instead of a static max-hp line. Occupies the
+    // same corner as the plain-text multi-selection summary; only one of the two is ever shown.
+    this.portraitEl = document.createElement('div');
+    this.portraitEl.style.cssText = `
+      position: absolute; bottom: 12px; left: 12px; width: 240px;
+      background: rgba(10,16,24,0.9); border: 1px solid #2ea3ff55; border-radius: 8px;
+      padding: 10px; font-family: 'Segoe UI', Roboto, sans-serif; color: #dff3ff;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none; display: none; user-select: none;
+    `;
+    container.appendChild(this.portraitEl);
+
+    const portraitHeader = document.createElement('div');
+    portraitHeader.style.cssText = 'display: flex; align-items: center; gap: 10px;';
+    this.portraitIcon = document.createElement('img');
+    this.portraitIcon.style.cssText = 'width: 56px; height: 56px; object-fit: contain; flex: none;';
+    const portraitTitleCol = document.createElement('div');
+    portraitTitleCol.style.cssText = 'flex: 1; min-width: 0;';
+    this.portraitTitle = document.createElement('div');
+    this.portraitTitle.style.cssText = 'font-size: 14px; font-weight: 700; color: #9fe8ff;';
+    this.portraitSubtitle = document.createElement('div');
+    this.portraitSubtitle.style.cssText = 'font-size: 10px; color: #dff3ffaa;';
+    portraitTitleCol.append(this.portraitTitle, this.portraitSubtitle);
+    portraitHeader.append(this.portraitIcon, portraitTitleCol);
+    this.portraitEl.appendChild(portraitHeader);
+
+    const hpRow = document.createElement('div');
+    hpRow.style.cssText = 'margin-top: 6px;';
+    const hpBarTrack = document.createElement('div');
+    hpBarTrack.style.cssText = 'height: 8px; border-radius: 4px; background: rgba(255,255,255,0.15); overflow: hidden;';
+    this.portraitHpBarFill = document.createElement('div');
+    this.portraitHpBarFill.style.cssText = 'height: 100%; background: linear-gradient(90deg, #4fc3ff, #9fe8ff); width: 100%;';
+    hpBarTrack.appendChild(this.portraitHpBarFill);
+    this.portraitHpText = document.createElement('div');
+    this.portraitHpText.style.cssText = 'font-size: 10px; color: #dff3ffcc; margin-top: 2px; text-align: right;';
+    hpRow.append(hpBarTrack, this.portraitHpText);
+    this.portraitEl.appendChild(hpRow);
+
+    this.portraitLines = document.createElement('div');
+    this.portraitLines.style.cssText = 'display: flex; flex-direction: column; gap: 3px; font-size: 10px; line-height: 1.4; margin-top: 6px;';
+    this.portraitEl.appendChild(this.portraitLines);
+
+    this.portraitFusionRow = document.createElement('div');
+    this.portraitFusionRow.style.cssText = `
+      display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 6px;
+      border-top: 1px solid #2ea3ff33;
+    `;
+    this.portraitFusionIcon = document.createElement('img');
+    this.portraitFusionIcon.style.cssText = 'width: 24px; height: 24px; object-fit: contain; flex: none;';
+    this.portraitFusionLabel = document.createElement('div');
+    this.portraitFusionLabel.style.cssText = 'font-size: 9px; color: #dff3ffcc; flex: 1;';
+    this.portraitFusionRow.append(this.portraitFusionIcon, this.portraitFusionLabel);
+    this.portraitEl.appendChild(this.portraitFusionRow);
 
     this.convergeButton = document.createElement('button');
     this.convergeButton.style.cssText = `
@@ -478,9 +582,13 @@ export class HUD {
   }
 
   update(state: HUDState): void {
-    this.coreEnergyEl.textContent = `⚡ Core Energy: ${Math.floor(state.coreEnergy)}`;
-    this.factionResourceEl.textContent = `◆ ${state.factionResourceLabel}: ${Math.floor(state.factionResource)}`;
+    this.coreEnergyEl.textContent = `Core Energy: ${Math.floor(state.coreEnergy)}`;
+    this.factionResourceEl.textContent = `${state.factionResourceLabel}: ${Math.floor(state.factionResource)}`;
     this.supplyEl.textContent = `Supply: ${state.supplyUsed} (${state.unitCount} units)`;
+    if (this.lastFactionResourceColor !== state.factionResourceColor) {
+      this.lastFactionResourceColor = state.factionResourceColor;
+      this.factionResourceIcon.innerHTML = factionResourceIconSvg(state.factionResourceColor);
+    }
 
     for (const panelState of state.panels) {
       this.updateTile(panelState);
@@ -628,6 +736,38 @@ export class HUD {
     this.convergeButton.style.display = 'block';
     this.convergeButton.textContent = option.label;
     this.convergeButton.onclick = option.onClick;
+  }
+
+  /** Shows/hides the single-selected-unit portrait (per user request: a live picture + stats, updated every frame so its health bar tracks damage). Pass null when 0 or 2+ units are selected. */
+  setPortrait(portrait: HUDPortraitInfo | null): void {
+    if (!portrait) {
+      this.portraitEl.style.display = 'none';
+      return;
+    }
+    this.portraitEl.style.display = 'block';
+    if (this.portraitIcon.src !== portrait.iconUrl) this.portraitIcon.src = portrait.iconUrl;
+    this.portraitTitle.textContent = portrait.title;
+    this.portraitSubtitle.textContent = portrait.subtitle;
+
+    const pct = portrait.maxHp > 0 ? Math.max(0, Math.min(1, portrait.hp / portrait.maxHp)) : 0;
+    this.portraitHpBarFill.style.width = `${pct * 100}%`;
+    this.portraitHpBarFill.style.background = pct > 0.5 ? 'linear-gradient(90deg, #4fc3ff, #9fe8ff)' : pct > 0.25 ? 'linear-gradient(90deg, #ffb84f, #ffd39f)' : 'linear-gradient(90deg, #ff4f4f, #ff9f9f)';
+    this.portraitHpText.textContent = `❤ ${Math.ceil(portrait.hp)} / ${portrait.maxHp}`;
+
+    this.portraitLines.innerHTML = '';
+    for (const line of portrait.lines) {
+      const row = document.createElement('div');
+      row.textContent = line;
+      this.portraitLines.appendChild(row);
+    }
+
+    if (portrait.fusion) {
+      this.portraitFusionIcon.src = portrait.fusion.iconUrl;
+      this.portraitFusionLabel.textContent = portrait.fusion.label;
+      this.portraitFusionRow.style.display = 'flex';
+    } else {
+      this.portraitFusionRow.style.display = 'none';
+    }
   }
 }
 
