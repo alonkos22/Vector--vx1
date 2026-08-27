@@ -676,7 +676,15 @@ function issueOrderAt(clientX: number, clientY: number): void {
 
   const target = selectedCombat.length > 0 ? pickTargetAt(clientX, clientY) : null;
   if (target) {
-    showOrderChoice(clientX, clientY, target, selectedCombat);
+    // Already close enough to auto-engage on its own (per user request): skip the attack-vs-watch
+    // choice and just attack — the choice is for a target spotted from further away, where "watch"
+    // (hold at range without engaging) is a real, distinct option worth asking about.
+    if (selectedCombat.some((u) => u.isWithinAggroRange(target))) {
+      for (const unit of selectedCombat) unit.setTarget(target);
+      hideOrderChoice();
+    } else {
+      showOrderChoice(clientX, clientY, target, selectedCombat);
+    }
   } else {
     hideOrderChoice();
   }

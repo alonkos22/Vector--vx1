@@ -47,15 +47,28 @@ function buildMountainCluster(rng: () => number, radius: number, peakHeight: num
   return group;
 }
 
+/**
+ * A mountain cluster's visual rocks scatter up to `visualRadius * 0.7` from center (see
+ * buildMountainCluster's `dist`) with their own radius adding up to another `visualRadius * 0.7` on
+ * top in the worst case (see `size`) — so the cluster's actual silhouette reaches roughly
+ * `visualRadius * 1.4` from center, well past the flat `blockRadius` the pathfinding grid used to use.
+ * Units were visibly walking through the outer rocks of every mountain. Block at the same footprint the
+ * geometry actually occupies instead of a smaller nominal radius.
+ */
+function mountainPathClearance(visualRadius: number): number {
+  return visualRadius * 1.4;
+}
+
 /** A ridge: a chain of mountain clusters along explicit points, each blocking pathfinding under it. Gaps in the point list (skip a position) become the narrow passes armies must funnel through. */
 function buildRidge(points: Array<[number, number]>, blockRadius: number, seed: number): THREE.Group {
   const group = new THREE.Group();
   const rng = mulberry32(seed);
+  const visualRadius = blockRadius * 1.15;
   for (const [x, z] of points) {
-    const cluster = buildMountainCluster(rng, blockRadius * 1.15, blockRadius * 1.8);
+    const cluster = buildMountainCluster(rng, visualRadius, blockRadius * 1.8);
     cluster.position.set(x, 0, z);
     group.add(cluster);
-    pathGrid.markCircleBlocked(new THREE.Vector3(x, 0, z), blockRadius);
+    pathGrid.markCircleBlocked(new THREE.Vector3(x, 0, z), mountainPathClearance(visualRadius));
   }
   return group;
 }
@@ -80,7 +93,7 @@ function buildPlateau(center: [number, number], radius: number, height: number):
   return group;
 }
 
-/** A crater: purely cosmetic (not blocked, no elevation) — a sunken dark floor ringed by a low raised lip. */
+/** A crater: a sunken pit ringed by a raised lip — impassable (per user request: units were walking straight over pits), no elevation concept since it's not walkable ground at all. */
 function buildCrater(center: [number, number], radius: number): THREE.Group {
   const group = new THREE.Group();
   const [x, z] = center;
@@ -98,6 +111,7 @@ function buildCrater(center: [number, number], radius: number): THREE.Group {
   rim.castShadow = true;
   group.add(rim);
 
+  pathGrid.markCircleBlocked(new THREE.Vector3(x, 0, z), radius * 0.85);
   return group;
 }
 

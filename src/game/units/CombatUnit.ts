@@ -162,6 +162,11 @@ export class CombatUnit extends Unit implements Targetable {
     this.state = 'idle';
   }
 
+  /** Whether `target` is already close enough that this unit would auto-engage it on sight — used to skip the attack-vs-watch choice for a nearby, obviously-hostile tap (per user request: the choice is for a target spotted from afar, not one already up close). */
+  isWithinAggroRange(target: Targetable): boolean {
+    return this.position.distanceTo(target.position) <= this.aggroRange;
+  }
+
   /** "Watch" order (vs. setTarget's "attack"): approaches to just outside attack range and holds there without engaging — a scouting stance, per user request the game offers as a choice alongside attack. */
   setWatchTarget(target: Targetable): void {
     this.target = null;
@@ -192,7 +197,7 @@ export class CombatUnit extends Unit implements Targetable {
     this.beginDeath(true);
   }
 
-  /** `targetCandidates` lets an idle, unordered unit auto-acquire the nearest enemy in range (targeting: nearest). */
+  /** `targetCandidates` lets an unordered unit auto-acquire the nearest enemy in range (targeting: nearest) — including one it's just passing by while moving to a rally point or attack-order destination (per user request: engage on sight, not only while standing idle), which is also how the AI engages the player on contact since AIController's units run through this same update(). */
   update(dt: number, camera: THREE.Camera, targetCandidates: Targetable[] = []): void {
     if (this.fusing) return;
     if (!this.isAlive()) {
@@ -206,8 +211,16 @@ export class CombatUnit extends Unit implements Targetable {
     if (this.watchTarget && !this.watchTarget.isAlive()) this.watchTarget = null;
 
     // A watching unit never auto-engages — that's the entire point of the stance (per user request).
-    if (!this.target && !this.watchTarget && !this.isMoving()) {
-      this.target = acquireTarget(this.position, this.ownerId, targetCandidates, 'nearest', this.aggroRange);
+    if (!this.target && !this.watchTarget) {
+      const acquired = acquireTarget(this.position, this.ownerId, targetCandidates, 'nearest', this.aggroRange);
+      if (acquired) {
+        this.target = acquired;
+        // Redirect toward it right away, even mid-move toward something else — the movement branch
+        // below only (re)issues moveTo when the unit isn't already moving, which would otherwise let a
+        // target spotted just outside attack range get "acquired" while the unit just keeps walking its
+        // old route past it instead of closing in.
+        if (this.position.distanceTo(acquired.position) > this.attackRange) this.moveTo(acquired.position);
+      }
     }
 
     if (this.target) {
