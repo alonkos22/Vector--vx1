@@ -387,7 +387,7 @@ app.appendChild(nodeInfoPanel);
 function showNodeInfo(node: ResourceNode): void {
   const resourceName = node.type === 'coreEnergy' ? 'Core Energy' : FACTION.factionResourceName;
   const workingCount = playerBase.harvesters.filter((h) => h.currentNode() === node).length;
-  const dropoff = node.type === 'coreEnergy' ? playerBase.mainBuilding : playerBase.getBuildingByRole('resourceDropoff');
+  const dropoff = playerBase.dropoffFor(node.type);
   const dropoffLine = dropoff
     ? `${Math.round(node.position.distanceTo(dropoff.position))}m from ${dropoff.config.name} — closer dropoffs mean faster round trips`
     : `Build a dropoff for ${resourceName} to start collecting it`;

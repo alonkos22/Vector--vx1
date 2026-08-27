@@ -116,9 +116,22 @@ export class PlayerBase {
   }
 
   private chooseResourceType(): ResourceType {
-    const dropoff = this.getBuildingByRole('resourceDropoff');
-    if (!dropoff || !dropoff.isComplete) return 'coreEnergy';
     return this.assignedToEnergy <= this.assignedToFlux ? 'coreEnergy' : 'factionResource';
+  }
+
+  /**
+   * The building a harvester should return resources to for a given type. Core Energy always drops off
+   * at the main structure; the faction resource prefers its dedicated resourceDropoff building once one is
+   * built, but falls back to the main structure too — previously it required the dropoff to exist at all
+   * (per user report: tapping a faction-resource node with a harvester selected silently did nothing before
+   * that building went up, and the two starting harvesters could only ever be auto-assigned to Core Energy
+   * for the same reason). Both resource types are minable from the very first harvester now; a built
+   * dedicated depot is a throughput upgrade (shorter round trips), not a prerequisite.
+   */
+  dropoffFor(type: ResourceType): Building | null {
+    if (type === 'coreEnergy') return this.mainBuilding;
+    const dedicated = this.getBuildingByRole('resourceDropoff');
+    return dedicated?.isComplete ? dedicated : this.mainBuilding;
   }
 
   /** Resolves either a canonical role (AIController) or a faction-specific building id (player-facing UI) to a role. */
@@ -154,7 +167,7 @@ export class PlayerBase {
     this.harvesters.push(harvester);
 
     const type = this.chooseResourceType();
-    const dropoff = type === 'coreEnergy' ? this.mainBuilding : this.getBuildingByRole('resourceDropoff');
+    const dropoff = this.dropoffFor(type);
     const node = this.findNearestNode(type, position);
     if (node && dropoff) {
       harvester.assign(node, dropoff);
@@ -166,7 +179,7 @@ export class PlayerBase {
 
   /** Player order (full manual control, per user request): sends a selected harvester to mine a specific resource node instead of wherever the auto-assignment put it, resolving the correct dropoff building for that resource type. */
   manualAssignHarvester(harvester: FluxHarvester, node: ResourceNode): void {
-    const dropoff = node.type === 'coreEnergy' ? this.mainBuilding : this.getBuildingByRole('resourceDropoff');
+    const dropoff = this.dropoffFor(node.type);
     if (!dropoff) return;
     harvester.orderMineAt(node, dropoff);
   }
