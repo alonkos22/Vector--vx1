@@ -1,5 +1,4 @@
 const LONG_PRESS_MS = 500;
-const SLOT_SIZE = 30;
 
 /**
  * Touch-friendly control-group bar (1-9): tap a slot to recall that group,
@@ -13,10 +12,12 @@ export class ControlGroupBar {
   private readonly slots: HTMLButtonElement[] = [];
 
   constructor(container: HTMLElement, onRecall: (groupNumber: number) => void, onAssign: (groupNumber: number) => void) {
+    // Mounted into HUD's own wrapping header row (not independently positioned) so it flows along with the
+    // resource bar instead of overlapping it once that text wraps to 2+ lines on a narrow phone.
     const root = document.createElement('div');
     root.style.cssText = `
-      position: absolute; top: 60px; right: 12px;
-      display: flex; gap: 4px; pointer-events: auto;
+      display: flex; flex-wrap: wrap; gap: clamp(2px, 1vw, 4px); justify-content: flex-end;
+      max-width: 100%; pointer-events: auto;
     `;
     container.appendChild(root);
 
@@ -24,8 +25,8 @@ export class ControlGroupBar {
       const slot = document.createElement('button');
       slot.textContent = String(n);
       slot.style.cssText = `
-        width: ${SLOT_SIZE}px; height: ${SLOT_SIZE}px; padding: 0;
-        font: inherit; font-size: 12px; font-weight: 700; color: #4a5a68;
+        width: clamp(20px, 6vw, 30px); height: clamp(20px, 6vw, 30px); padding: 0; flex: none;
+        font: inherit; font-size: clamp(9px, 2.6vw, 12px); font-weight: 700; color: #4a5a68;
         background: rgba(10,16,24,0.75); border: 1px solid #2ea3ff55; border-radius: 4px;
         cursor: pointer; touch-action: manipulation;
       `;

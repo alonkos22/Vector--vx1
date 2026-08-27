@@ -7,6 +7,7 @@ import { BIOMES } from './config/biomes';
 import { FACTIONS } from './config/factions';
 import { BUILDINGS_BY_FACTION, BUILDING_ROLES, type BuildingRole, type BuildingConfig } from './config/buildings';
 import { UNITS_BY_FACTION, type UnitConfig } from './config/units';
+import { archetypeLabel } from './config/unitArchetypes';
 import { CONVERGENCE_BY_FACTION } from './config/convergence';
 import { BUILDING_FUSION_BY_FACTION } from './config/buildingFusion';
 import { PlayerBase } from './game/PlayerBase';
@@ -184,15 +185,17 @@ function applySunProximity(progress: number, stage: SunProximityStage): void {
   }
 }
 
+// Mounted into HUD's own header flow (see hud.matchStatusSlot below) rather than independently
+// absolute-positioned, since a fixed "top: 12px" collided with the resource bar once it wrapped to
+// 2+ lines on a narrow phone. Appended to hud.matchStatusSlot once `hud` is constructed further down.
 const matchStatusEl = document.createElement('div');
 matchStatusEl.style.cssText = `
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
   background: rgba(10,16,24,0.75); border: 1px solid #2ea3ff55; border-radius: 6px;
-  padding: 6px 16px; font-family: 'Segoe UI', Roboto, sans-serif; font-size: 13px;
+  padding: 6px 16px; font-family: 'Segoe UI', Roboto, sans-serif; font-size: clamp(10px, 3vw, 13px);
   color: #dff3ff; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none; user-select: none;
+  white-space: nowrap;
 `;
 matchStatusEl.textContent = 'Sun Proximity: Stable';
-app.appendChild(matchStatusEl);
 
 // ---------------------------------------------------------------------------
 // Pathfinding grid: init before anything moves, then register static obstacles.
@@ -233,11 +236,20 @@ function addHomeResourceNodes(base: PlayerBase, sign: 1 | -1): void {
 addHomeResourceNodes(playerBase, 1);
 addHomeResourceNodes(aiBase, -1);
 
+// Passive-economy factions (Solari Archons: harvesterUnitId === null) have no harvester unit at all — their
+// resources trickle in on their own — but that left the player staring at a base with 0 visible, movable units
+// at match start, reading as "broken" rather than "different economy." Every faction still gets 2 starting
+// mobile units; passive factions get 2 of their basic-infantry unit instead of harvesters.
 function spawnStartingHarvesters(base: PlayerBase): void {
+  const harvesterUnitId = base.harvesterUnitId();
+  const fallbackUnitId = harvesterUnitId
+    ? null
+    : (Object.values(UNITS_BY_FACTION[base.factionId]).find((u) => u.role === 'basic infantry')?.id ?? null);
   for (let i = 0; i < STARTING_HARVESTERS; i++) {
     const angle = (i / STARTING_HARVESTERS) * Math.PI * 2;
     const spawnPos = base.basePosition.clone().add(new THREE.Vector3(Math.cos(angle) * 5, 0, Math.sin(angle) * 5));
-    base.spawnHarvester(spawnPos);
+    if (harvesterUnitId) base.spawnHarvester(spawnPos);
+    else if (fallbackUnitId) base.spawnCombatUnit(fallbackUnitId, spawnPos);
   }
 }
 spawnStartingHarvesters(playerBase);
@@ -752,6 +764,7 @@ const hud = new HUD(app, BUILDING_ROLES, {
   onClearRallyPoint: clearRallyPoint,
   onMergeBuildings: mergeBuildings,
 });
+hud.matchStatusSlot.appendChild(matchStatusEl);
 
 const minimap = new Minimap(
   app,
@@ -766,7 +779,7 @@ const minimap = new Minimap(
 );
 
 const controlGroupBar = new ControlGroupBar(
-  app,
+  hud.controlGroupSlot,
   (groupNumber) => {
     soundManager.playUIClick();
     selection.recallControlGroup(groupNumber);
@@ -777,11 +790,13 @@ const controlGroupBar = new ControlGroupBar(
   },
 );
 
+// Generic archetype label per building role (per user request: show both the building's own flavor
+// name and a familiar archetype name — e.g. "Barracks" — together).
 const ROLE_LABEL: Record<BuildingRole, string> = {
-  main: 'Main Structure',
-  resourceDropoff: 'Resource Dropoff',
-  basicProduction: 'Basic Production',
-  heavyProduction: 'Heavy Production',
+  main: 'Command Center',
+  resourceDropoff: 'Resource Depot',
+  basicProduction: 'Barracks',
+  heavyProduction: 'War Factory',
 };
 
 /** Icon + label pointing at a related unit's picture for the detail popup's fusion row (per user request: show a picture of the unit that gets created, and how many of the original unit are needed). Prefers showing "what this fuses INTO" (the more actionable direction while browsing a build menu); falls back to "what this was fused FROM" for a unit that's itself a Convergence output. */
@@ -810,7 +825,10 @@ function findUnitFusionInfo(unitId: string): { iconUrl: string; label: string } 
 /** Full stat/matchup breakdown for a unit's long-press detail popup (per user request: cost, resources, HP, attack, class strengths/weaknesses, speed, and a picture + count for its Convergence fusion). */
 function buildUnitDetail(unitConfig: UnitConfig): HUDDetailInfo {
   const combat = unitConfig.combat;
-  const lines: string[] = [`💰 Cost: ${formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec)}`];
+  const lines: string[] = [
+    `🏷 ${unitConfig.role}`,
+    `💰 Cost: ${formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec)}`,
+  ];
   lines.push(unitConfig.costFactionResource > 0 ? `Needs: Core Energy + ${FACTION.factionResourceName}` : 'Needs: Core Energy only');
 
   if (combat) {
@@ -832,7 +850,7 @@ function buildUnitDetail(unitConfig: UnitConfig): HUDDetailInfo {
   return {
     title: unitConfig.name,
     iconUrl: getIcon(`unit:${unitConfig.id}`, () => buildUnitVisual(unitConfig.id)),
-    subtitle: unitConfig.role,
+    subtitle: archetypeLabel(unitConfig.id),
     lines,
     fusion: findUnitFusionInfo(unitConfig.id),
   };
@@ -879,7 +897,7 @@ function buildPanelState(role: BuildingRole): HUDPanelState {
       const unitConfig = PLAYER_UNITS[unitId];
       return {
         unitId,
-        name: unitConfig.name,
+        name: `${archetypeLabel(unitId)} · ${unitConfig.name}`,
         costLabel: formatCost(unitConfig.costCoreEnergy, unitConfig.costFactionResource, unitConfig.buildTimeSec),
         ...unitStatsAndAbilities(unitConfig),
         power: unitPowerScore(unitConfig),

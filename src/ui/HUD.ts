@@ -145,6 +145,10 @@ export class HUD {
   private lastFactionResourceColor: number | null = null;
   private readonly supplyEl: HTMLSpanElement;
   private readonly statusEl: HTMLDivElement;
+  /** Where ControlGroupBar mounts its 1-9 buttons — a real flex child of the header row instead of an independently fixed-position element, so it wraps along with the resource bar rather than overlapping it. */
+  readonly controlGroupSlot: HTMLDivElement;
+  /** Where the match-wide Sun Proximity banner mounts — previously its own independently `position:absolute; top:12px; left:50%` element in main.ts, which sat at the exact same vertical offset as the resource bar and overlapped it once the bar wrapped to 2+ lines on a narrow phone. */
+  readonly matchStatusSlot: HTMLDivElement;
   private readonly selectionEl: HTMLDivElement;
 
   // --- Portrait panel (per user request: a live picture + stats for the single selected unit) ---
@@ -181,7 +185,7 @@ export class HUD {
     const root = document.createElement('div');
     root.style.cssText = `
       position: absolute; top: 12px; left: 12px; right: 12px;
-      display: flex; justify-content: space-between; align-items: flex-start;
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px;
       font-family: 'Segoe UI', Roboto, sans-serif; color: #dff3ff; pointer-events: none;
       text-shadow: 0 1px 3px rgba(0,0,0,0.8); user-select: none;
     `;
@@ -189,33 +193,52 @@ export class HUD {
     const resourceBar = document.createElement('div');
     resourceBar.style.cssText = `
       background: rgba(10,16,24,0.75); border: 1px solid #2ea3ff55;
-      border-radius: 6px; padding: 10px 16px; font-size: 15px;
-      display: flex; gap: 22px; align-items: center; pointer-events: auto;
+      border-radius: 6px; padding: 8px 12px; font-size: clamp(10px, 3.4vw, 15px);
+      display: flex; flex-wrap: wrap; gap: clamp(8px, 2.5vw, 22px); row-gap: 4px;
+      align-items: center; pointer-events: auto; white-space: nowrap;
     `;
     const coreEnergyIcon = document.createElement('span');
     coreEnergyIcon.innerHTML = coreEnergyIconSvg();
-    coreEnergyIcon.style.cssText = 'display: inline-flex; margin-right: 6px; vertical-align: middle;';
+    coreEnergyIcon.style.cssText = 'display: inline-flex; margin-right: 6px; vertical-align: middle; flex: none;';
     this.coreEnergyEl = document.createElement('span');
     const coreEnergyGroup = document.createElement('span');
-    coreEnergyGroup.style.cssText = 'display: inline-flex; align-items: center;';
+    coreEnergyGroup.style.cssText = 'display: inline-flex; align-items: center; white-space: nowrap;';
     coreEnergyGroup.append(coreEnergyIcon, this.coreEnergyEl);
 
     this.factionResourceIcon = document.createElement('span');
-    this.factionResourceIcon.style.cssText = 'display: inline-flex; margin-right: 6px; vertical-align: middle;';
+    this.factionResourceIcon.style.cssText = 'display: inline-flex; margin-right: 6px; vertical-align: middle; flex: none;';
     this.factionResourceEl = document.createElement('span');
     const factionResourceGroup = document.createElement('span');
-    factionResourceGroup.style.cssText = 'display: inline-flex; align-items: center;';
+    factionResourceGroup.style.cssText = 'display: inline-flex; align-items: center; white-space: nowrap;';
     factionResourceGroup.append(this.factionResourceIcon, this.factionResourceEl);
 
     this.supplyEl = document.createElement('span');
-    this.supplyEl.style.color = '#9fd8ff';
+    this.supplyEl.style.cssText = 'color: #9fd8ff; white-space: nowrap;';
     resourceBar.append(coreEnergyGroup, factionResourceGroup, this.supplyEl);
     root.appendChild(resourceBar);
 
+    // Real flow layout, not a fixed pixel offset (per user report: the control-group bar was hard-coded to
+    // "top: 60px" assuming a single-line header, and overlapped the resource bar's text once that text
+    // wrapped to 2-3 lines on a narrow phone). ControlGroupBar mounts its 1-9 buttons into this slot, which
+    // wraps along with everything else in `root` instead of floating at an assumed height.
+    this.controlGroupSlot = document.createElement('div');
+    this.controlGroupSlot.style.cssText = 'display: flex; pointer-events: auto;';
+    root.appendChild(this.controlGroupSlot);
+
+    // Full-width row of its own, below resourceBar/controlGroupSlot, so the banner main.ts mounts here
+    // never sits at the same vertical offset as the resource bar regardless of how many lines it wraps to.
+    this.matchStatusSlot = document.createElement('div');
+    this.matchStatusSlot.style.cssText = 'display: flex; justify-content: center; flex: 0 0 100%; pointer-events: none;';
+    root.appendChild(this.matchStatusSlot);
+
+    // flex-basis: 100% forces this onto its own full-width row below resourceBar/controlGroupSlot,
+    // regardless of how much space they leave on the first line — otherwise, at some viewport widths, it
+    // would fit in the leftover sliver of line 1 and end up visually colliding with the resource bar.
     this.statusEl = document.createElement('div');
     this.statusEl.style.cssText =
-      'background: rgba(10,16,24,0.75); border-radius: 4px; padding: 4px 10px; font-size: 12px; color: #9fd8ff; min-height: 14px; pointer-events: none;';
+      'background: rgba(10,16,24,0.75); border-radius: 4px; padding: 4px 10px; font-size: clamp(9px, 2.8vw, 12px); color: #9fd8ff; min-height: 14px; pointer-events: none; white-space: nowrap; flex: 0 0 100%; text-align: center;';
     root.appendChild(this.statusEl);
+
     container.appendChild(root);
 
     this.selectionEl = document.createElement('div');
@@ -627,7 +650,7 @@ export class HUD {
     const tray = this.trays.get(panelState.role);
     if (!tray) return;
 
-    tray.title.textContent = panelState.buildingName;
+    tray.title.textContent = `${panelState.detail.subtitle} · ${panelState.buildingName}`;
     if (tray.titleIcon.src !== panelState.iconUrl) tray.titleIcon.src = panelState.iconUrl;
     tray.statsLine.textContent = panelState.built
       ? `❤ ${Math.ceil(panelState.hp)}/${panelState.maxHp} HP · 👁 ${panelState.visionRadius} vision`
