@@ -170,6 +170,8 @@ export class HUD {
   private openRole: BuildingRole | null = null;
 
   // --- Long-press detail popup (per user request: full stats/matchup breakdown on demand) ---
+  /** True for the instant after showDetail() opens the popup — suppresses the very next overlay click, which on touch is the SAME long-press gesture's own release synthesizing a click at the now-covered point (hit-testing the freshly-opened backdrop), not a real dismiss request. Same class of problem as ControlGroupBar/HUD's other long-press-vs-click races: a same-gesture trailing event must be explicitly suppressed, not raced against. */
+  private suppressNextOverlayClick = false;
   private readonly detailOverlay: HTMLDivElement;
   private readonly detailPanel: HTMLDivElement;
   private readonly detailIcon: HTMLImageElement;
@@ -350,6 +352,10 @@ export class HUD {
       display: none; align-items: center; justify-content: center; pointer-events: auto;
     `;
     this.detailOverlay.addEventListener('click', (e) => {
+      if (this.suppressNextOverlayClick) {
+        this.suppressNextOverlayClick = false;
+        return;
+      }
       if (e.target === this.detailOverlay) this.hideDetail();
     });
     container.appendChild(this.detailOverlay);
@@ -418,6 +424,7 @@ export class HUD {
     } else {
       this.detailFusionRow.style.display = 'none';
     }
+    this.suppressNextOverlayClick = true;
     this.detailOverlay.style.display = 'flex';
   }
 
