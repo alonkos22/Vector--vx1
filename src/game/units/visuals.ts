@@ -110,6 +110,9 @@ function buildTeslaArchon(): THREE.Object3D {
 
 /** Nanite Weaver: spider-like four-legged chrome hover drone, glass torso globe filled with green-cyan nanite liquid. */
 function buildNaniteWeaver(): THREE.Object3D {
+  const imported = getImportedUnitModel('nanite-weaver');
+  if (imported) return imported;
+
   const group = new THREE.Group();
   const chrome = new THREE.MeshStandardMaterial({ color: 0xc7d2da, metalness: 0.85, roughness: 0.2 });
   const glassMaterial = new THREE.MeshStandardMaterial({
@@ -715,6 +718,9 @@ function buildCryoThrowerMech(): THREE.Object3D {
 
 /** Boiler Juggernaut: giant square tracked tank, central glowing steam boiler with brass gauges, multiple exhaust stacks blasting steam. */
 function buildBoilerJuggernaut(): THREE.Object3D {
+  const imported = getImportedUnitModel('boiler-juggernaut');
+  if (imported) return imported;
+
   const group = new THREE.Group();
   const steelMaterial = new THREE.MeshStandardMaterial({ color: 0x5a6268, roughness: 0.55, metalness: 0.6 });
   const boilerMaterial = new THREE.MeshStandardMaterial({ color: 0xb5651d, emissive: 0xff6a2a, emissiveIntensity: 0.9, roughness: 0.4, metalness: 0.4 });
@@ -1106,6 +1112,9 @@ function buildNullweaver(): THREE.Object3D {
 
 /** Voidmaw Horror: hunched multi-limbed void beast with a gaping crystalline maw on its chest. */
 function buildVoidmawHorror(): THREE.Object3D {
+  const imported = getImportedUnitModel('voidmaw-horror');
+  if (imported) return imported;
+
   const group = new THREE.Group();
   const hideMaterial = new THREE.MeshStandardMaterial({ color: 0x1a0f28, roughness: 0.45, metalness: 0.2 });
   const mawMaterial = new THREE.MeshStandardMaterial({ color: 0xd94fd9, emissive: 0xd94fd9, emissiveIntensity: 1.0, roughness: 0.2, metalness: 0.1 });

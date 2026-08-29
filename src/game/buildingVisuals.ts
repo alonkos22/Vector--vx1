@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { BuildingRole } from '../config/buildings';
+import { getImportedBuildingModel } from './ImportedBuildingModels';
 
 /**
  * Procedural per-role building silhouettes (§4's "not a single hexagon"
@@ -259,7 +260,20 @@ export function buildBuildingVisual(
   roughness: number,
   metalness: number,
   shapeFamily: ShapeFamily,
+  buildingId?: string,
 ): { group: THREE.Group; material: THREE.MeshStandardMaterial } {
+  const imported = buildingId ? getImportedBuildingModel(buildingId) : null;
+  if (imported) {
+    // The imported model owns its own (already-flattened, already-cloned) materials — expose the first
+    // one found as the nominal `material` return value for API compatibility; Building.ts itself
+    // collects every material under the group by traversal for the construction fade-in, same as
+    // CombatUnit's hit-flash does for imported unit models.
+    let first: THREE.MeshStandardMaterial | null = null;
+    imported.traverse((child) => {
+      if (!first && child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) first = child.material;
+    });
+    return { group: imported as THREE.Group, material: first ?? makeMaterial(color, roughness, metalness) };
+  }
   const material = makeMaterial(color, roughness, metalness);
   const group = withShadows(BUILDERS[shapeFamily][shapeKind](footprint, material)) as THREE.Group;
   return { group, material };

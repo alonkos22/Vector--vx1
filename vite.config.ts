@@ -12,6 +12,8 @@ export default defineConfig({
   // Vite doesn't recognize .glb as an asset by default, so it would try to parse it as a JS module.
   assetsInclude: ['**/*.glb'],
   build: {
-    assetsInlineLimit: 2 * 1024 * 1024,
+    // Raised from 2MB to fit the largest imported model (a mech at ~2.1MB after texture-stripping and
+    // decimation) — still comfortably inside the single-file artifact's overall size ceiling.
+    assetsInlineLimit: 3 * 1024 * 1024,
   },
 });

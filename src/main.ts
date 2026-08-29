@@ -35,6 +35,7 @@ import { Minimap } from './ui/Minimap';
 import { ControlGroupBar } from './ui/ControlGroupBar';
 import { soundManager } from './game/SoundManager';
 import { preloadImportedUnitModels } from './game/ImportedUnitModels';
+import { preloadImportedBuildingModels } from './game/ImportedBuildingModels';
 import { getIcon } from './game/IconRenderer';
 import { buildBuildingVisual } from './game/buildingVisuals';
 import { buildUnitVisual } from './game/units/visuals';
@@ -48,6 +49,7 @@ window.addEventListener('keydown', () => soundManager.unlock(), { once: true });
 // (see ImportedUnitModels.ts) are ready by the time a player can queue their first Shade Stalker, Solar
 // Zealot, or Flux Harvester.
 preloadImportedUnitModels();
+preloadImportedBuildingModels();
 
 function formatCost(costCoreEnergy: number, costFactionResource: number, buildTimeSec: number): string {
   const parts: string[] = [];
@@ -880,7 +882,8 @@ function buildBuildingDetail(role: BuildingRole, config: BuildingConfig): HUDDet
     const recipe = BUILDING_FUSION_BY_FACTION[PLAYER_FACTION_ID];
     fusion = {
       iconUrl: getIcon(`building:${recipe.id}`, () =>
-        buildBuildingVisual('heavyProduction', recipe.footprint, recipe.color, recipe.materialRoughness, recipe.materialMetalness, config.shapeFamily).group,
+        buildBuildingVisual('heavyProduction', recipe.footprint, recipe.color, recipe.materialRoughness, recipe.materialMetalness, config.shapeFamily, recipe.id)
+          .group,
       ),
       label: `⚡ Merges with the other production building into: ${recipe.name} (${formatCost(recipe.extraCoreEnergyCost, recipe.extraFactionResourceCost, recipe.buildTimeSec)})`,
     };
@@ -890,7 +893,7 @@ function buildBuildingDetail(role: BuildingRole, config: BuildingConfig): HUDDet
     title: config.name,
     iconUrl: getIcon(
       `building:${config.id}`,
-      () => buildBuildingVisual(role, config.footprint, config.color, config.materialRoughness, config.materialMetalness, config.shapeFamily).group,
+      () => buildBuildingVisual(role, config.footprint, config.color, config.materialRoughness, config.materialMetalness, config.shapeFamily, config.id).group,
     ),
     subtitle: ROLE_LABEL[role],
     lines,
@@ -940,7 +943,7 @@ function buildPanelState(role: BuildingRole): HUDPanelState {
     visionRadius: config.visionRadius,
     iconUrl: getIcon(
       `building:${config.id}`,
-      () => buildBuildingVisual(role, config.footprint, config.color, config.materialRoughness, config.materialMetalness, config.shapeFamily).group,
+      () => buildBuildingVisual(role, config.footprint, config.color, config.materialRoughness, config.materialMetalness, config.shapeFamily, config.id).group,
     ),
     detail: buildBuildingDetail(role, config),
     units,

@@ -27,7 +27,8 @@ export class Building implements Targetable {
   /** Ground point newly produced combat units auto-move to, or null to spawn in place. Player-set only; the AI doesn't use rally points. */
   rallyPoint: THREE.Vector3 | null = null;
 
-  private readonly material: THREE.MeshStandardMaterial;
+  /** Every MeshStandardMaterial under the visual group, collected by traversal (same pattern as CombatUnit's hit-flash) so the construction fade-in works whether the visual is one shared procedural material or a multi-material imported model. */
+  private readonly materials: THREE.MeshStandardMaterial[] = [];
   private readonly healthBar: HealthBar;
   private constructionRemaining: number;
   private readonly productionQueue: QueuedItem[] = [];
@@ -41,18 +42,23 @@ export class Building implements Targetable {
 
     const role = BUILDING_ROLE_BY_ID[config.id] ?? BUILDING_FUSION_ROLE_BY_ID[config.id];
     this.role = role;
-    const { group, material } = buildBuildingVisual(
+    const { group } = buildBuildingVisual(
       role,
       config.footprint,
       config.color,
       config.materialRoughness,
       config.materialMetalness,
       config.shapeFamily,
+      config.id,
     );
-    this.material = material;
-    this.material.emissiveIntensity = prebuilt ? 0.35 : 0.1;
-    this.material.transparent = !prebuilt;
-    this.material.opacity = prebuilt ? 1 : 0.4;
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) this.materials.push(child.material);
+    });
+    for (const m of this.materials) {
+      m.emissiveIntensity = prebuilt ? 0.35 : 0.1;
+      m.transparent = !prebuilt;
+      m.opacity = prebuilt ? 1 : 0.4;
+    }
 
     this.mesh = group;
     this.mesh.position.copy(this.position);
@@ -83,14 +89,16 @@ export class Building implements Targetable {
     if (!this.isComplete) {
       this.constructionRemaining -= dt;
       const progress = 1 - Math.max(this.constructionRemaining, 0) / this.config.buildTimeSec;
-      this.material.opacity = 0.4 + progress * 0.6;
+      for (const m of this.materials) m.opacity = 0.4 + progress * 0.6;
       this.mesh.scale.setScalar(0.5 + progress * 0.5);
 
       if (this.constructionRemaining <= 0) {
         this.isComplete = true;
-        this.material.opacity = 1;
-        this.material.transparent = false;
-        this.material.emissiveIntensity = 0.35;
+        for (const m of this.materials) {
+          m.opacity = 1;
+          m.transparent = false;
+          m.emissiveIntensity = 0.35;
+        }
         this.mesh.scale.setScalar(1);
         soundManager.playBuildingComplete();
       }
