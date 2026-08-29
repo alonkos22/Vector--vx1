@@ -241,8 +241,25 @@ export abstract class Unit {
 
     // Idle units only get a gentle un-stack nudge, not a full move-speed step, so they don't visibly "walk" without an order.
     const appliedStep = hasPath ? step : this.moveSpeed * dt * 0.5;
-    this.position.x += move.x * appliedStep;
-    this.position.z += move.z * appliedStep;
+    const nextX = this.position.x + move.x * appliedStep;
+    const nextZ = this.position.z + move.z * appliedStep;
+
+    // A path is computed once, against the blocked-grid state at that moment — a building placed
+    // afterward along an already-committed route never gets checked again, so a unit already en route
+    // walked straight through it (per user report). Catch that here, right before the step that would
+    // land inside newly-blocked ground, and replan a fresh route to the same final destination instead.
+    // Gated on the unit's *current* cell being clear: plenty of legitimate spots (the map's center Core
+    // Zone, right up against a building's clearance margin) read as "blocked" by this same grid, and a
+    // unit already standing in or grazing one of those must keep moving through it exactly as before —
+    // only a transition from clear ground into newly-blocked ground should trigger a replan.
+    if (hasPath && !pathGrid.isBlocked(this.position) && pathGrid.isBlocked(new THREE.Vector3(nextX, 0, nextZ))) {
+      const finalGoal = this.path[this.path.length - 1];
+      this.moveTo(finalGoal);
+      return false;
+    }
+
+    this.position.x = nextX;
+    this.position.z = nextZ;
     this.syncMeshToGround();
 
     if (hasPath) {

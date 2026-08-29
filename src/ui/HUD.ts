@@ -542,8 +542,21 @@ export class HUD {
     const titleIcon = document.createElement('img');
     titleIcon.style.cssText = 'width: 28px; height: 28px; object-fit: contain; flex: none;';
     const title = document.createElement('div');
-    title.style.cssText = 'font-size: 11px; font-weight: 700; color: #9fd8ff;';
-    titleRow.append(titleIcon, title);
+    title.style.cssText = 'font-size: 11px; font-weight: 700; color: #9fd8ff; flex: 1; min-width: 0;';
+    // Explicit close affordance (per user report: the only way to close the tray — tapping its own tile
+    // again — wasn't discoverable, reading as "this won't close").
+    const closeTrayBtn = document.createElement('button');
+    closeTrayBtn.textContent = '✕';
+    closeTrayBtn.style.cssText = `
+      flex: none; background: rgba(46,163,255,0.15); border: 1px solid #2ea3ff88; border-radius: 6px;
+      color: #dff3ff; font-size: 12px; width: 22px; height: 22px; cursor: pointer; touch-action: manipulation;
+      padding: 0;
+    `;
+    closeTrayBtn.addEventListener('click', () => {
+      soundManager.playUIClick();
+      this.closeTray();
+    });
+    titleRow.append(titleIcon, title, closeTrayBtn);
     tray.appendChild(titleRow);
 
     const statsLine = document.createElement('div');
