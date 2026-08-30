@@ -270,7 +270,18 @@ export abstract class Unit {
     // Zone, right up against a building's clearance margin) read as "blocked" by this same grid, and a
     // unit already standing in or grazing one of those must keep moving through it exactly as before —
     // only a transition from clear ground into newly-blocked ground should trigger a replan.
-    if (hasPath && !pathGrid.isBlocked(this.position) && pathGrid.isBlocked(new THREE.Vector3(nextX, 0, nextZ))) {
+    // Also gated on the *destination itself* not being blocked: a harvester's target is its dropoff
+    // building's own position, which always sits inside that building's own clearance circle — for that
+    // path, "the next step is blocked" is simply "arriving", not a new obstacle, and replanning toward a
+    // permanently-blocked destination can never resolve, which without this check left every harvester
+    // freezing in place just short of its own dropoff (and every other unit walking up to attack/interact
+    // with a building) forever re-planning a route that keeps ending on blocked ground.
+    if (
+      hasPath &&
+      !pathGrid.isBlocked(this.position) &&
+      !pathGrid.isBlocked(this.path[this.path.length - 1]) &&
+      pathGrid.isBlocked(new THREE.Vector3(nextX, 0, nextZ))
+    ) {
       const finalGoal = this.path[this.path.length - 1];
       this.moveTo(finalGoal);
       return false;
