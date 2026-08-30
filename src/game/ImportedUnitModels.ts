@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import shadeStalkerUrl from '../assets/models/shade-stalker.glb';
 import solarZealotUrl from '../assets/models/solar-zealot.glb';
 import fluxHarvesterUrl from '../assets/models/flux-harvester.glb';
@@ -24,6 +25,13 @@ interface ImportedUnitSpec {
   /** Uniform scale bringing the source model's arbitrary size to the game's ~1.3-1.8 unit tall convention. */
   scale: number;
   rotationY: number;
+  /**
+   * Some source files embed a real animation clip (a mixamo walk cycle, a drone's spinning-rotor loop).
+   * `animateAlways` picks how Unit plays it back: false (default) advances it only while the unit is
+   * moving and freezes it on the current frame when idle, matching a walk cycle; true keeps it running
+   * regardless of movement, for a clip that isn't tied to locomotion (e.g. rotors that spin at rest too).
+   */
+  animateAlways?: boolean;
 }
 
 const SPECS: Record<string, ImportedUnitSpec> = {
@@ -34,15 +42,22 @@ const SPECS: Record<string, ImportedUnitSpec> = {
   // this heavy-infantry unit's taller-than-basic-infantry silhouette (selectionRadius 1.1 vs ~0.6-0.7).
   'voidmaw-horror': { url: biomechMutantUrl, scale: 0.0125, rotationY: 0 },
   // Source quadcopter is ~4.3 units across its rotor span (raw scale) — 0.33 brings it to ~1.4 units
-  // wide, roughly matching this support unit's selectionRadius (0.7 -> ~1.4 diameter).
-  'nanite-weaver': { url: robotDroneUrl, scale: 0.33, rotationY: 0 },
+  // wide, roughly matching this support unit's selectionRadius (0.7 -> ~1.4 diameter). Its embedded clip
+  // spins the rotors, which a hovering drone should do at rest too, not just while translating.
+  'nanite-weaver': { url: robotDroneUrl, scale: 0.33, rotationY: 0, animateAlways: true },
   // Source mech is ~733 units tall (raw Sketchfab scale) — 0.00287 brings it to ~2.1 units, matching
   // this heavy-tank unit's bulk (selectionRadius 1.2, on par with Voidmaw Horror's imported scale).
   'boiler-juggernaut': { url: megabotUrl, scale: 0.00287, rotationY: 0 },
 };
 
+interface LoadedUnitModel {
+  root: THREE.Object3D;
+  animations: THREE.AnimationClip[];
+  animateAlways: boolean;
+}
+
 const loader = new GLTFLoader();
-const loaded = new Map<string, THREE.Object3D>();
+const loaded = new Map<string, LoadedUnitModel>();
 
 export function preloadImportedUnitModels(): void {
   for (const [unitTypeId, spec] of Object.entries(SPECS)) {
@@ -63,7 +78,7 @@ export function preloadImportedUnitModels(): void {
         // far off the ground otherwise.
         const box = new THREE.Box3().setFromObject(root);
         root.position.y -= box.min.y;
-        loaded.set(unitTypeId, root);
+        loaded.set(unitTypeId, { root, animations: gltf.animations, animateAlways: spec.animateAlways ?? false });
       },
       undefined,
       (error) => console.error('Failed to load imported unit model', unitTypeId, error),
@@ -75,16 +90,26 @@ export function preloadImportedUnitModels(): void {
  * A fresh clone ready to use as a unit's visual mesh, or null if the model hasn't finished loading yet
  * (caller should fall back to its procedural builder). Materials are cloned too, not just geometry — every
  * unit instance needs its own material objects since hit-flash mutates emissiveIntensity directly on them,
- * and sharing one material across every unit of a type would flash them all in sync.
+ * and sharing one material across every unit of a type would flash them all in sync. Uses SkeletonUtils
+ * (not Object3D.clone) so a skinned mesh's bones get cloned and rebound correctly — a plain clone(true)
+ * duplicates the bone nodes but leaves the skin's bone references pointing at the originals, which would
+ * make every cloned unit of a skinned model animate/pose in lockstep with the first one loaded.
+ * When the source embedded an animation clip, it's carried over on the clone's userData so Unit can play
+ * it back — AnimationClip tracks bind to nodes by name, so the same clip works against any clone that
+ * preserved the original hierarchy's names, no per-instance retargeting needed.
  */
 export function getImportedUnitModel(unitTypeId: string): THREE.Object3D | null {
-  const root = loaded.get(unitTypeId);
-  if (!root) return null;
-  const clone = root.clone(true);
+  const entry = loaded.get(unitTypeId);
+  if (!entry) return null;
+  const clone = cloneSkeleton(entry.root) as THREE.Object3D;
   clone.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       child.material = Array.isArray(child.material) ? child.material.map((m) => m.clone()) : child.material.clone();
     }
   });
+  if (entry.animations.length > 0) {
+    clone.userData.importedAnimations = entry.animations;
+    clone.userData.animateAlways = entry.animateAlways;
+  }
   return clone;
 }

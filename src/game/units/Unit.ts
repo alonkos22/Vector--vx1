@@ -71,6 +71,10 @@ export abstract class Unit {
   private readonly flashMaterials: THREE.MeshStandardMaterial[] = [];
   private readonly flashBaseIntensity: number[] = [];
 
+  /** Drives a real embedded animation clip for imported models that have one (see ImportedUnitModels) — null for every other unit, which keeps the plain translate+bob movement. */
+  private readonly animationMixer: THREE.AnimationMixer | null = null;
+  private readonly animateAlways: boolean = false;
+
   constructor(
     unitTypeId: string,
     ownerId: string,
@@ -101,6 +105,13 @@ export abstract class Unit {
         this.flashBaseIntensity.push(child.material.emissiveIntensity);
       }
     });
+
+    const importedAnimations = visualMesh.userData.importedAnimations as THREE.AnimationClip[] | undefined;
+    if (importedAnimations && importedAnimations.length > 0) {
+      this.animationMixer = new THREE.AnimationMixer(visualMesh);
+      this.animationMixer.clipAction(importedAnimations[0]).play();
+      this.animateAlways = Boolean(visualMesh.userData.animateAlways);
+    }
 
     registerUnit(this);
     soundManager.playSpawn();
@@ -150,6 +161,13 @@ export abstract class Unit {
       this.hitFlashTimer = Math.max(this.hitFlashTimer - dt, 0);
       const boost = (this.hitFlashTimer / flashDuration) * HIT_FLASH_INTENSITY_BOOST * this.hitFlashScale;
       for (let i = 0; i < this.flashMaterials.length; i++) this.flashMaterials[i].emissiveIntensity = this.flashBaseIntensity[i] + boost;
+    }
+
+    // Advance the embedded clip only while it's actually meaningful to: a walk cycle should freeze on its
+    // current frame the instant the unit stops (not keep stepping in place), while a clip like spinning
+    // rotors (animateAlways) keeps running at rest too.
+    if (this.animationMixer && (this.animateAlways || this.isMoving())) {
+      this.animationMixer.update(dt);
     }
   }
 
