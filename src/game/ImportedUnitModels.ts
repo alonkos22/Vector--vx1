@@ -7,6 +7,12 @@ import fluxHarvesterUrl from '../assets/models/flux-harvester.glb';
 import biomechMutantUrl from '../assets/models/biomech-mutant.glb';
 import robotDroneUrl from '../assets/models/robot-drone.glb';
 import megabotUrl from '../assets/models/megabot.glb';
+import ashfangHoundUrl from '../assets/models/ashfang-hound.glb';
+import cinderKaijuUrl from '../assets/models/cinder-kaiju.glb';
+import warDrakeUrl from '../assets/models/war-drake.glb';
+import thornhideMinotaurUrl from '../assets/models/thornhide-minotaur.glb';
+import nightfangUrl from '../assets/models/nightfang.glb';
+import voidscarAberrationUrl from '../assets/models/voidscar-aberration.glb';
 
 /**
  * Three unit types swap their procedural placeholder geometry for a user-supplied 3D scan, chosen per unit
@@ -48,6 +54,20 @@ const SPECS: Record<string, ImportedUnitSpec> = {
   // Source mech is ~733 units tall (raw Sketchfab scale) — 0.00287 brings it to ~2.1 units, matching
   // this heavy-tank unit's bulk (selectionRadius 1.2, on par with Voidmaw Horror's imported scale).
   'boiler-juggernaut': { url: megabotUrl, scale: 0.00287, rotationY: 0 },
+  // 4-legged fast lava hound: Pyroliths' "vehicle speed" light unit (see Unit.ts's moveSpeed). Source is
+  // already game-unit-scale (~1.1 tall), so no rescale needed.
+  'ashfang-hound': { url: ashfangHoundUrl, scale: 1.0, rotationY: 0 },
+  // Source kaiju is ~2.5 tall/6.6 long (raw scale) — 0.7 brings it to a bulky-but-fits heavy quadruped,
+  // Pyroliths' first producible ground-heavy (they previously only had an air-heavy, Acid Drake).
+  'cinder-kaiju': { url: cinderKaijuUrl, scale: 0.7, rotationY: 0 },
+  // Source dragon is ~112 tall / 342 long (raw Sketchfab scale, modeled in a gliding pose) — 0.0105 brings
+  // its length to ~3.6 units, Frost-Forged's first air unit (they previously had none).
+  'war-drake': { url: warDrakeUrl, scale: 0.0105, rotationY: 0 },
+  'thornhide-minotaur': { url: thornhideMinotaurUrl, scale: 0.8, rotationY: 0 },
+  // Source lycan is ~232 tall in its hunched rest pose (raw scale) — 0.0065 brings it to ~1.5 units.
+  'nightfang': { url: nightfangUrl, scale: 0.0065, rotationY: 0 },
+  // Source is ~13.5 tall (raw Blender scale) — 0.11 brings it to ~1.5 units.
+  'voidscar-aberration': { url: voidscarAberrationUrl, scale: 0.11, rotationY: 0 },
 };
 
 interface LoadedUnitModel {

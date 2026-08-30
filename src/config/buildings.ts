@@ -158,7 +158,7 @@ const RAW_BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingConf
       materialRoughness: 0.9,
       materialMetalness: 0.05,
       shapeFamily: 'round',
-      produces: ['magma-imp', 'ignis-priest'],
+      produces: ['magma-imp', 'ignis-priest', 'ashfang-hound'],
       dropoffResource: null,
     },
     heavyProduction: {
@@ -174,7 +174,7 @@ const RAW_BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingConf
       materialRoughness: 0.9,
       materialMetalness: 0.05,
       shapeFamily: 'round',
-      produces: ['acid-drake'],
+      produces: ['acid-drake', 'cinder-kaiju'],
       dropoffResource: null,
     },
   },
@@ -225,7 +225,7 @@ const RAW_BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingConf
       materialRoughness: 0.25,
       materialMetalness: 0.6,
       shapeFamily: 'round',
-      produces: ['solar-zealot', 'astral-frost-scribe'],
+      produces: ['solar-zealot', 'astral-frost-scribe', 'voidscar-aberration'],
       dropoffResource: null,
     },
     heavyProduction: {
@@ -308,7 +308,7 @@ const RAW_BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingConf
       materialRoughness: 0.55,
       materialMetalness: 0.55,
       shapeFamily: 'angular',
-      produces: ['boiler-juggernaut'],
+      produces: ['boiler-juggernaut', 'war-drake'],
       dropoffResource: null,
     },
   },
@@ -359,7 +359,7 @@ const RAW_BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingConf
       materialRoughness: 0.8,
       materialMetalness: 0.05,
       shapeFamily: 'round',
-      produces: ['thorn-skitterling', 'spore-mystic'],
+      produces: ['thorn-skitterling', 'spore-mystic', 'thornhide-minotaur'],
       dropoffResource: null,
     },
     heavyProduction: {
@@ -426,7 +426,7 @@ const RAW_BUILDINGS_BY_FACTION: Record<string, Record<BuildingRole, BuildingConf
       materialRoughness: 0.2,
       materialMetalness: 0.3,
       shapeFamily: 'angular',
-      produces: ['shade-stalker', 'nullweaver'],
+      produces: ['shade-stalker', 'nullweaver', 'nightfang'],
       dropoffResource: null,
     },
     heavyProduction: {

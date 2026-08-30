@@ -202,6 +202,40 @@ const RAW_UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       // Balance pass: was the weakest heavy-tier unit in the game for its cost (breathes acid on a wide arc, so hits 2 targets now).
       combat: { hp: 110, damage: 19, attackRange: 9, attackCooldown: 1.4, windupTime: 0.5, healthBarYOffset: 2.3, multiTargetCount: 2 },
     },
+    // Imported from an uploaded lava-hound scan (per user request: a 4-legged unit with "vehicle speed" —
+    // moveSpeed 9.5 is the fastest unit in the game, faster than the previous record-holders (Solar
+    // Zealot/Shade Stalker at 8). Every faction's own heavy already checks it via the light/heavy/air
+    // triangle (heavy beats light) — no separate "limiter" unit needed for that.
+    'ashfang-hound': {
+      id: 'ashfang-hound',
+      name: 'Ashfang Hound',
+      role: 'light skirmisher - fire beast',
+      costCoreEnergy: 22,
+      costFactionResource: 12,
+      supply: 1,
+      buildTimeSec: 7,
+      moveSpeed: 9.5,
+      selectionRadius: 0.6,
+      visionRadius: 9,
+      color: 0xff6a1a,
+      combat: { hp: 30, damage: 5, attackRange: 1.3, attackCooldown: 0.6, windupTime: 0.2, healthBarYOffset: 1.3 },
+    },
+    // Imported from an uploaded kaiju scan — Pyroliths' first producible ground-heavy (Acid Drake, their
+    // only other heavy-tier producible unit, is air-classed).
+    'cinder-kaiju': {
+      id: 'cinder-kaiju',
+      name: 'Cinder Kaiju',
+      role: 'heavy beast - eldritch flame',
+      costCoreEnergy: 110,
+      costFactionResource: 70,
+      supply: 3,
+      buildTimeSec: 23,
+      moveSpeed: 4,
+      selectionRadius: 1.3,
+      visionRadius: 9,
+      color: 0xff4500,
+      combat: { hp: 190, damage: 20, attackRange: 2.0, attackCooldown: 1.0, windupTime: 0.35, healthBarYOffset: 2.9 },
+    },
     // --- Convergence (Conglomeration) outputs ---
     'molten-behemoth': {
       id: 'molten-behemoth',
@@ -280,6 +314,22 @@ const RAW_UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       // Kinetic Crush: re-tuned up from the old "support/air" numbers now that this is the faction's heavy-tier unit.
       // Balance pass: still underweight vs. other heavy units at this cost; raised hp/damage further.
       combat: { hp: 160, damage: 26, attackRange: 8, attackCooldown: 0.9, windupTime: 0.3, healthBarYOffset: 2.4 },
+    },
+    // Imported from an uploaded monster-sculpt scan — a void-touched aberration the Archons bind to their
+    // service, matching their existing cosmic-horror-adjacent lore (Eclipse Titan, Void Arbiter).
+    'voidscar-aberration': {
+      id: 'voidscar-aberration',
+      name: 'Voidscar Aberration',
+      role: 'light aberration - void-touched',
+      costCoreEnergy: 18,
+      costFactionResource: 24,
+      supply: 1,
+      buildTimeSec: 8,
+      moveSpeed: 6,
+      selectionRadius: 0.8,
+      visionRadius: 10,
+      color: 0x9b5de5,
+      combat: { hp: 40, damage: 6, attackRange: 1.6, attackCooldown: 0.7, windupTime: 0.25, healthBarYOffset: 1.8 },
     },
     // --- Convergence (Ascension) outputs ---
     'ascended-zealot': {
@@ -373,6 +423,22 @@ const RAW_UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       // Boiler Blast: a 360-degree steam wave hitting everyone nearby.
       combat: { hp: 130, damage: 34, attackRange: 12, attackCooldown: 1.8, windupTime: 0.7, healthBarYOffset: 2.6, multiTargetCount: 3 },
     },
+    // Imported from an uploaded dragon scan — Frost-Forged's first air unit (they previously had none, and
+    // already have two producible ground-heavies, so this fills their one real gap rather than adding more).
+    'war-drake': {
+      id: 'war-drake',
+      name: 'War Drake',
+      role: 'heavy air - fire drake',
+      costCoreEnergy: 115,
+      costFactionResource: 75,
+      supply: 3,
+      buildTimeSec: 24,
+      moveSpeed: 6,
+      selectionRadius: 1.2,
+      visionRadius: 11,
+      color: 0x8a4a17,
+      combat: { hp: 190, damage: 26, attackRange: 8, attackCooldown: 1.3, windupTime: 0.4, healthBarYOffset: 2.8, multiTargetCount: 2 },
+    },
     // --- Convergence (Forge-Weld) outputs ---
     'forge-walker': {
       id: 'forge-walker',
@@ -461,6 +527,22 @@ const RAW_UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       // Whirling thorn swipe hits two targets at once.
       combat: { hp: 190, damage: 14, attackRange: 1.9, attackCooldown: 0.9, windupTime: 0.4, healthBarYOffset: 2.8, multiTargetCount: 2 },
     },
+    // Imported from an uploaded minotaur-berserker scan — a beast-warrior diversifying Verdant Wilds'
+    // light-tier roster.
+    'thornhide-minotaur': {
+      id: 'thornhide-minotaur',
+      name: 'Thornhide Minotaur',
+      role: 'light brute - beast warrior',
+      costCoreEnergy: 24,
+      costFactionResource: 18,
+      supply: 1,
+      buildTimeSec: 8,
+      moveSpeed: 6.5,
+      selectionRadius: 0.85,
+      visionRadius: 8,
+      color: 0x6b9b4f,
+      combat: { hp: 45, damage: 7, attackRange: 1.6, attackCooldown: 0.8, windupTime: 0.3, healthBarYOffset: 1.9 },
+    },
     // --- Convergence (Symbiosis) outputs ---
     'bramblehive-matron': {
       id: 'bramblehive-matron',
@@ -547,6 +629,22 @@ const RAW_UNITS_BY_FACTION: Record<string, Record<string, UnitConfig>> = {
       visionRadius: 9,
       color: 0x3a1a5a,
       combat: { hp: 180, damage: 30, attackRange: 6, attackCooldown: 1.3, windupTime: 0.5, healthBarYOffset: 2.7 },
+    },
+    // Imported from an uploaded werewolf (lycan) scan — a fast night predator diversifying Umbral Voidkin's
+    // light-tier roster.
+    nightfang: {
+      id: 'nightfang',
+      name: 'Nightfang',
+      role: 'light predator - shadow beast',
+      costCoreEnergy: 20,
+      costFactionResource: 16,
+      supply: 1,
+      buildTimeSec: 7,
+      moveSpeed: 8.5,
+      selectionRadius: 0.65,
+      visionRadius: 9,
+      color: 0x7a3fb0,
+      combat: { hp: 32, damage: 5, attackRange: 1.3, attackCooldown: 0.6, windupTime: 0.2, healthBarYOffset: 1.5 },
     },
     // --- Convergence (Assimilation) outputs ---
     'shade-legion': {

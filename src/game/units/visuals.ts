@@ -353,6 +353,52 @@ function buildAcidDrake(): THREE.Object3D {
   return withShadows(group);
 }
 
+/** Ashfang Hound: a fast 4-legged fire beast — swapped for an imported lava-hound scan once it loads. */
+function buildAshfangHound(): THREE.Object3D {
+  const imported = getImportedUnitModel('ashfang-hound');
+  if (imported) return imported;
+
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0x1c120c, emissive: 0xff6a1a, emissiveIntensity: 0.7, roughness: 0.6, metalness: 0.1 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.5, 4, 8), material);
+  body.rotation.z = Math.PI / 2;
+  body.position.y = 0.55;
+  group.add(body);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.35, 6), material);
+  head.rotation.z = -Math.PI / 2;
+  head.position.set(0.5, 0.55, 0);
+  group.add(head);
+  for (const [x, z] of [[0.22, 0.16], [0.22, -0.16], [-0.22, 0.16], [-0.22, -0.16]] as const) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.5, 6), material);
+    leg.position.set(x, 0.25, z);
+    group.add(leg);
+  }
+  return withShadows(group);
+}
+
+/** Cinder Kaiju: a bulky heavy beast — swapped for an imported kaiju scan once it loads. */
+function buildCinderKaiju(): THREE.Object3D {
+  const imported = getImportedUnitModel('cinder-kaiju');
+  if (imported) return imported;
+
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0x1c140e, emissive: 0xff6a1a, emissiveIntensity: 0.8, roughness: 0.7, metalness: 0.15 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 1.0, 4, 10), material);
+  body.rotation.z = Math.PI / 2;
+  body.position.y = 1.1;
+  group.add(body);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.7, 6), material);
+  head.rotation.z = -Math.PI / 2;
+  head.position.set(1.1, 1.15, 0);
+  group.add(head);
+  for (const [x, z] of [[0.5, 0.35], [0.5, -0.35], [-0.5, 0.35], [-0.5, -0.35]] as const) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 1.0, 6), material);
+    leg.position.set(x, 0.5, z);
+    group.add(leg);
+  }
+  return withShadows(group);
+}
+
 /** Molten Behemoth (3x Magma Imp fusion): a larger rock brute with wide arms and deep lava cracks. */
 function buildMoltenBehemoth(): THREE.Object3D {
   const group = new THREE.Group();
@@ -538,6 +584,28 @@ function buildAstralFrostScribe(): THREE.Object3D {
     group.add(ring);
   });
 
+  return withShadows(group);
+}
+
+/** Voidscar Aberration: a crouched void-touched creature — swapped for an imported monster scan once it loads. */
+function buildVoidscarAberration(): THREE.Object3D {
+  const imported = getImportedUnitModel('voidscar-aberration');
+  if (imported) return imported;
+
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0xc9b8b0, emissive: 0x9b5de5, emissiveIntensity: 0.4, roughness: 0.5, metalness: 0.1 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.5, 4, 8), material);
+  body.position.y = 0.75;
+  group.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), material);
+  head.position.y = 1.25;
+  group.add(head);
+  for (const side of [-1, 1] as const) {
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.5, 4, 6), material);
+    arm.position.set(side * 0.35, 0.6, 0);
+    arm.rotation.z = side * 0.5;
+    group.add(arm);
+  }
   return withShadows(group);
 }
 
@@ -751,6 +819,32 @@ function buildBoilerJuggernaut(): THREE.Object3D {
   return withShadows(group);
 }
 
+/** War Drake: Frost-Forged's air unit — swapped for an imported dragon scan once it loads. */
+function buildWarDrake(): THREE.Object3D {
+  const imported = getImportedUnitModel('war-drake');
+  if (imported) return imported;
+
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0x8a4a17, roughness: 0.6, metalness: 0.2 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.9, 4, 10), material);
+  body.rotation.z = Math.PI / 2;
+  body.position.y = 1.6;
+  group.add(body);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.5, 6), material);
+  head.rotation.z = -Math.PI / 2;
+  head.position.set(0.75, 1.6, 0);
+  group.add(head);
+  const wingGeo = new THREE.PlaneGeometry(1.4, 0.8);
+  for (const side of [-1, 1] as const) {
+    const wing = new THREE.Mesh(wingGeo, material);
+    wing.position.set(-0.1, 1.7, side * 0.5);
+    wing.rotation.x = side * 0.7;
+    wing.rotation.y = Math.PI / 2;
+    group.add(wing);
+  }
+  return withShadows(group);
+}
+
 /** Forge Walker (3x Steam Scrapper fusion): a bulked-up Steam Scrapper with a second drill arm. */
 function buildForgeWalker(): THREE.Object3D {
   const group = new THREE.Group();
@@ -910,6 +1004,29 @@ function buildSporeMystic(): THREE.Object3D {
   pod.position.set(0.38, 1.65, 0);
   group.add(pod);
 
+  return withShadows(group);
+}
+
+/** Thornhide Minotaur: a beast-warrior brute — swapped for an imported minotaur scan once it loads. */
+function buildThornhideMinotaur(): THREE.Object3D {
+  const imported = getImportedUnitModel('thornhide-minotaur');
+  if (imported) return imported;
+
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0x6b9b4f, roughness: 0.6, metalness: 0.05 });
+  const hornMaterial = new THREE.MeshStandardMaterial({ color: 0xd9d0b8, roughness: 0.5, metalness: 0.1 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.6, 4, 8), material);
+  body.position.y = 0.85;
+  group.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), material);
+  head.position.y = 1.45;
+  group.add(head);
+  for (const side of [-1, 1] as const) {
+    const horn = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.3, 5), hornMaterial);
+    horn.position.set(side * 0.15, 1.65, 0);
+    horn.rotation.z = side * 0.4;
+    group.add(horn);
+  }
   return withShadows(group);
 }
 
@@ -1110,6 +1227,28 @@ function buildNullweaver(): THREE.Object3D {
   return withShadows(group);
 }
 
+/** Nightfang: a fast night predator — swapped for an imported lycan scan once it loads. */
+function buildNightfang(): THREE.Object3D {
+  const imported = getImportedUnitModel('nightfang');
+  if (imported) return imported;
+
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0x2a1f38, roughness: 0.6, metalness: 0.1 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.55, 4, 8), material);
+  body.position.y = 0.8;
+  group.add(body);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.35, 6), material);
+  head.rotation.x = Math.PI;
+  head.position.y = 1.3;
+  group.add(head);
+  for (const side of [-1, 1] as const) {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.15, 4), material);
+    ear.position.set(side * 0.1, 1.5, 0);
+    group.add(ear);
+  }
+  return withShadows(group);
+}
+
 /** Voidmaw Horror: hunched multi-limbed void beast with a gaping crystalline maw on its chest. */
 function buildVoidmawHorror(): THREE.Object3D {
   const imported = getImportedUnitModel('voidmaw-horror');
@@ -1247,12 +1386,15 @@ const BUILDERS: Record<string, () => THREE.Object3D> = {
   'magma-imp': buildMagmaImp,
   'ignis-priest': buildIgnisPriest,
   'acid-drake': buildAcidDrake,
+  'ashfang-hound': buildAshfangHound,
+  'cinder-kaiju': buildCinderKaiju,
   'molten-behemoth': buildMoltenBehemoth,
   'obsidian-chimera': buildObsidianChimera,
   // Solari Archons
   'solar-zealot': buildSolarZealot,
   'void-arbiter': buildVoidArbiter,
   'astral-frost-scribe': buildAstralFrostScribe,
+  'voidscar-aberration': buildVoidscarAberration,
   'ascended-zealot': buildAscendedZealot,
   'eclipse-titan': buildEclipseTitan,
   // Frost-Forged
@@ -1260,12 +1402,14 @@ const BUILDERS: Record<string, () => THREE.Object3D> = {
   'steam-scrapper': buildSteamScrapper,
   'cryo-thrower-mech': buildCryoThrowerMech,
   'boiler-juggernaut': buildBoilerJuggernaut,
+  'war-drake': buildWarDrake,
   'forge-walker': buildForgeWalker,
   'thermal-shock-engine': buildThermalShockEngine,
   // Verdant Wilds
   'root-tender': buildRootTender,
   'thorn-skitterling': buildThornSkitterling,
   'spore-mystic': buildSporeMystic,
+  'thornhide-minotaur': buildThornhideMinotaur,
   'bramble-colossus': buildBrambleColossus,
   'bramblehive-matron': buildBramblehiveMatron,
   'verdant-devourer': buildVerdantDevourer,
@@ -1273,6 +1417,7 @@ const BUILDERS: Record<string, () => THREE.Object3D> = {
   'husk-drifter': buildHuskDrifter,
   'shade-stalker': buildShadeStalker,
   nullweaver: buildNullweaver,
+  nightfang: buildNightfang,
   'voidmaw-horror': buildVoidmawHorror,
   'shade-legion': buildShadeLegion,
   'oblivion-warden': buildOblivionWarden,
